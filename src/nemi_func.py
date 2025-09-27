@@ -45,19 +45,13 @@ def apply_umap(dfn: np.ndarray, min_dist: float=0.5, umap_neighbors: int=200,
     return df_umap
 
 
-def get_sorted_clusters(df_umap, n_clusters=9, hclust_neighbors=40):
-
-    print('HCLUST: n_neighbors = '+str(hclust_neighbors))
-    print('HCLUST: no of clusters = '+str(n_clusters))
+def get_sorted_clusters(df_umap, n_clusters=3, hclust_neighbors=40):
 
     # Clustering
-    # print('Clustering ...')
-    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, include_self=False)
+    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=-1, include_self=False)
     model = AgglomerativeClustering(linkage='ward', connectivity=knn_graph, n_clusters=n_clusters)    
     clusters = model.fit_predict(df_umap)
 
-    # print('Sorting ...')
-    
     # Number of clusters (also the same as the label name in the agglomerated cluster dict)
     n_clusters = np.max(clusters) + 1
     
@@ -72,25 +66,16 @@ def get_sorted_clusters(df_umap, n_clusters=9, hclust_neighbors=40):
     new_labels.fill(np.nan)
     for new_label, old_label in enumerate(sorted_clusters):
         new_labels[clusters == old_label] = new_label
-
-    print('Realisation finished')
-    # q.put(new_labels)
     
     return new_labels
 
 
 def get_clusters(df_umap, n_clusters=9, hclust_neighbors=40):
 
-    print('HCLUST: n_neighbors = ' + str(hclust_neighbors))
-    print('HCLUST: no of clusters = ' + str(n_clusters))
-
-    # print('clustering..')
+    # Clustering
     knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, include_self=False)
     model = AgglomerativeClustering(linkage='ward', connectivity=knn_graph, n_clusters=n_clusters)    
     clusters = model.fit_predict(df_umap)
-
-    print('Realisation finished')
-    # q.put(new_labels)
     
     return clusters
 
@@ -104,10 +89,7 @@ def run_agglom(df_umap, n_clusters=9, hclust_neighbors=40):
     Returns:
         np.ndarray: Cluster labels for each point in the UMAP-transformed data.
     """
-    print(f'Agglomerative Clustering: no of neighbors = {hclust_neighbors}')
-    print(f'Agglomerative Clustering: no of clusters = {n_clusters}')
-
-    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, include_self=False)
+    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=-1, include_self=False)
     model = AgglomerativeClustering(linkage='ward', connectivity=knn_graph, n_clusters=n_clusters)    
     clusters = model.fit_predict(df_umap)
     
