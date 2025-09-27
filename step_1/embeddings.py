@@ -61,10 +61,9 @@ def process_embedding(data, member, umap_kwargs, embed_dir, scaler=None):
 
     # Manifold representation learning
     if embedding_exists():
-        af.log_info(f'Embedding already exists, and can be loaded from: <{output_filename}>')
+        af.log_info(f'Embedding <{suffix}> already exists.')
         return
     else:
-        af.log_info('Computing new embedding with given configuration ...')
         # --- Preprocessing ---
         if scaler is not None:
             valid_scalers = ['Quantile-Normal', 'Quantile-Uniform', 'Robust', 'Standard', 'Signed-Log', 'Power-10']
@@ -93,7 +92,7 @@ def process_embedding(data, member, umap_kwargs, embed_dir, scaler=None):
         return embedding
 
 
-def run_embedding(parquet_file:str, resolution:str, member:int, umap_kwargs:dict, scaler:str):
+def run_embedding(parquet_file:str, member:int, umap_kwargs:dict, scaler:str):
     """
     Main function to execute the embedding process. This function reads
     the input data, applies UMAP for dimmemberionality reduction, and saves 
@@ -126,6 +125,9 @@ def run_embedding(parquet_file:str, resolution:str, member:int, umap_kwargs:dict
     af.log_info("Loading data ...")
     data = pd.read_parquet(parquet_file)
     data = data.values
+    
+    # Get resolution from the file path
+    resolution = parquet_file.split('/')[-1].split('-')[-1].split('_')[0]
 
     # Define embedding output directory
     field = parquet_file.split('/')[-1].split('.')[0].split('_')[-1]
@@ -157,16 +159,15 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # Check command-line arguments
-    if len(sys.argv) != 6:
-        print("Usage: python export_embedding.py <csv_file/parquet_file> <resolution> <member> <min_dist> <n_neighbors> <scaler>")
+    if len(sys.argv) != 5:
+        print("Usage: python export_embedding.py <csv_file/parquet_file> <member> <min_dist> <n_neighbors> <scaler>")
         sys.exit(1)
 
     # Parse command-line arguments
     parquet_file = sys.argv[1]
-    resolution = int(sys.argv[2])
-    member = int(sys.argv[3])
-    umap_kwargs = {"umap_md": float(sys.argv[4]),
-                   "umap_nn": int(sys.argv[5])}
+    member = int(sys.argv[2])
+    umap_kwargs = {"umap_md": float(sys.argv[3]),
+                   "umap_nn": int(sys.argv[4])}
     scaler = None
     
     # Call and run the embedding main function

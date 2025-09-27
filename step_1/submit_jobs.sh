@@ -8,9 +8,10 @@
 # Define variables for the script
 # Supported by UC Davis SLURM scheduler 
 ENSEMBLES=(0 5) # Define the ensemble numbers default to 5 (can be adjusted as needed)
-# ENSEMBLES=(15) # For one member only
-MIN_DISTANCES=(0.1 0.3 0.5 0.7 0.9) # Define the minimum distances (can be adjusted as needed)
-UMAP_KNNS=(5 10 50 100 200) # Define the number of neighbors (can be adjusted as needed)
+# ENSEMBLES=(10 15) # For memebers 11 to 20
+# ENSEMBLES=(10) # For memebers 11 to 15
+UMAP_MDS=(0.1 0.3 0.5 0.7 0.9) # Define the minimum distances (can be adjusted as needed)
+UMAP_NNS=(5 10 50 100 200) # Define the number of neighbors (can be adjusted as needed)
 
 # Seem too large for the job requirements. 
 # ENSEMBLES=($(seq 0 5 45)) # Define the ensemble numbers (can be adjusted as needed)
@@ -20,16 +21,16 @@ DATA_PATH="/group/maikesgrp/laique/NOAA/nemis/CM4X-p125/inputs/glob_scaled_CM4X-
 
 echo
 
-for md in "${MIN_DISTANCES[@]}"
+for umap_md in "${UMAP_MDS[@]}"
 do
-	for u_knn in "${UMAP_KNNS[@]}"
+	for umap_nn in "${UMAP_NNS[@]}"
 	do
-		for ens in "${ENSEMBLES[@]}"
+		for member in "${ENSEMBLES[@]}"
 		do
 			# Submit the job to SLURM for each combination
 			echo
-			echo "Running embedding job for: block_5_ensemble_num = ${ens}, min_dist = ${md}, n_neighbors = ${u_knn}"
-			sbatch --job-name=Emb-$ens.$md.$u_knn run_embeddings.sh "$ens" "$md" "$u_knn" "$DATA_PATH"
+			echo "Running embedding job for: block_5_ensemble_num = ${member}, min_dist = ${umap_md}, n_neighbors = ${umap_nn}"
+			sbatch --job-name=Emb-$member.$umap_md.$umap_nn run_embeddings.sh "$member" "$umap_md" "$umap_nn" "$DATA_PATH" 
 		done	
 	done
 done
