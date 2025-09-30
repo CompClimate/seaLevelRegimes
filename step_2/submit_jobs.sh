@@ -2,17 +2,18 @@
 
 # Runs for all parameters and for 50 ensembles for each param combinations
 # This script submits jobs to a SLURM scheduler for running the `run_cluster.sh` script with various parameters.
-# It uses a nested loop to iterate through different combinations of ensemble numbers, minimum distances, UMAP KNN values, and number of clusters.
+# It uses a nested loop to iterate through different combinations of ensemble size, UMAP minimum distances, UMAP NN values, and number of clusters.
 # The script is designed to be run on a high-performance computing (HPC) cluster.
 
 # Define variables for the script
 # Supported by UC Davis SLURM scheduler 
-ENSEMBLES=(0 5) # Define the ensemble numbers default to 5 (can be adjusted as needed)
-# ENSEMBLES=(10 15) # For memebers 11 to 20
-# ENSEMBLES=(10) # For memebers 11 to 15
+ENSEMBLES=(0 5 10 15) # Define the ensemble numbers default to 5 members per ensemble block (can be adjusted as needed). Only if you have enough memory
+# ENSEMBLES=(0 5) # For memebers 1 to 10
+# ENSEMBLES=(15) # For memebers 16 to 20
 UMAP_MDS=(0.1 0.3 0.5 0.7 0.9) # Define the minimum distances (can be adjusted as needed)
 UMAP_NNS=(5 10 50 100 200) # Define the number of neighbors (can be adjusted as needed)
 NUM_CLUSTS=(3 5 6 7 10 13 15 16 20 25) # Define the number of clusters (can be adjusted as needed)
+# NUM_CLUSTS=(3 10) # To run non completed clusterings
 HCLUST_N=40 # Define the number of neighbors for hierarchical clustering (can be adjusted as needed)
 
 # Seem too large for the job requirements. 
@@ -31,7 +32,7 @@ do
 				# Submit the job to SLURM for each combination
 				echo
 				echo "Running clustering job for: block_5_ensemble_num = ${member}, min_dist = ${umap_md}"
-				echo "n_neighbors ${umap_nn}, num_cluster=${nc}, hclust_knn = ${HCLUST_N}"
+				echo "n_neighbors ${umap_nn}, num_clusters=${nc}, hclust_n = ${HCLUST_N}"
 				sbatch --job-name=HAC-$member.$umap_md.$umap_nn.$nc run_hac_clusters.sh "$member" "$umap_md" "$umap_nn" "$nc" "$HCLUST_N"
 			done
 		done	

@@ -35,13 +35,23 @@ def run_clustering(member:int, resolution:str, field:str, umap_kwargs:dict, clus
     Main function to execute the clustering process. 
     
     Args:
-        ens (int): Ensemble number.
-        min_dist (float): Minimum distance for UMAP.
-        umap_knn (int): UMAP nearest neighbors.
-        n_clusters (int): Number of clusters.
-        hclust_knn (int): HCLUST nearest neighbors.
-        region (str): Region of interest.
-        scaler (str): Data scaler used.
+        member (int): Ensemble number.
+        resolution (str): Resolution of the data.
+        field (str): 'mean' for statics and anything else for dynamics.
+        
+        umap_kwargs: Keyword arguments to passed to UMAP.
+            UMAP options:
+                - umap_md (float): min_dist defaults to 0.5
+                - umap_nn (int): n_neighbors defaults to 200
+                - n_components (int): number of embedding dimensions (defaults to 3)
+                - n_epochs (int): number of epochs (defaults to None)
+                - learning_rate (float): learning rate (defaults to 1.0)
+
+        clustering_kwargs : Keyword arguments to passed to clustering method.
+            Clustering methods available: 'Agglomerative'.
+            Agglomerative options:
+                - n_clusters (int) defaults to 3
+                - hclust_n (int) defaults to 40
     """
     
     print("\n-------------- STARTING CLUSTERING ----------------\n")
@@ -63,7 +73,7 @@ def run_clustering(member:int, resolution:str, field:str, umap_kwargs:dict, clus
     print(f"{' '*5}• AGGLOMEROTIVE n_clusters = {n_clusters}")
     print(f"{' '*5}• AGGLOMEROTIVE hclust_neighbors  = {hclust_n}") 
 
-    # Declare embedding directory
+    # Declare embedding and clustering directories
     if field == 'mean':
         embed_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/embeddings'
         clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/clusterings/nclusters_{n_clusters}'
@@ -84,11 +94,11 @@ def run_clustering(member:int, resolution:str, field:str, umap_kwargs:dict, clus
             return False
     
     # Ensure the output directory exists
-    af.log_info(f"Creating <{embed_dir}> if it doesn't exist ...")
+    af.log_info(f"Creating <{clust_dir}> if it doesn't exist ...")
     af.make_dirs(clust_dir)
     
     # Generate output data filename
-    suffix = f"{preffix}_hclustn_{hclust_n}_nc_{n_clusters}"
+    suffix = f"{preffix}_nc_{n_clusters}_hclustn_{hclust_n}"
     output_filename = f"{clust_dir}/{suffix}.npy"
     
     if embedding_exists():
@@ -128,14 +138,16 @@ if __name__ == "__main__":
     member = int(sys.argv[1])
     umap_kwargs = {"umap_md": float(sys.argv[2]),
                    "umap_nn": int(sys.argv[3])}
-    clust_kwargs = {"n_clusters": float(sys.argv[4]),
+    clust_kwargs = {"n_clusters": int(sys.argv[4]),
                     "hclust_n": int(sys.argv[5])}
     resolution = 'p125' 
     field = 'mean'  # for 'statics' or 'dynamics', depending on your data
     
     # Call and run the clustering main function
-    run_clustering(member=member, resolution=resolution,
+    af.log_info('Started clustering of learned Manifold Representation.')
+    run_clustering(member=member, resolution=resolution, field=field,
                    umap_kwargs=umap_kwargs, clust_kwargs=clust_kwargs)
+    af.log_info('Completed clustering of learned Manifold Representation.')
     
     # Record the end time
     end_time = time.time()
