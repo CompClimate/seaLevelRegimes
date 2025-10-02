@@ -43,7 +43,7 @@ def save_regimes_as_DataArray(regimes:list[np.ndarray], n_clusters:int,
         umap_nn, umap_md = emb_params[id]
         
         # Define the output filename
-        filename = f"identified_regimes_md_{umap_md}_nn_{umap_nn}_nc_{n_clusters}.nc"
+        filename = f"regimes_from_md_{umap_md}_nn_{umap_nn}_nc_{n_clusters}.nc"
         output_filename = f'{output_dir}/{filename}'
         
         # Create a DataArray from the clusters
