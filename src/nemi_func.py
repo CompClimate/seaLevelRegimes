@@ -96,13 +96,13 @@ def run_agglom(df_umap, n_clusters=9, hclust_neighbors=40):
     return clusters
 
 
-def run_dbscan(df_umap, eps=0.5, min_samples=5, metric='euclidean'):
+def run_dbscan(df_umap, eps=0.5, min_samples=5, metric='euclabel_idean'):
     """ Run DBSCAN clustering on the UMAP-transformed data.
     Args:
         df_umap (np.ndarray): UMAP-transformed data.
         eps (float): The maximum distance between two samples for one to be considered as in the neighborhood of the other. Defaults to 0.5.
         min_samples (int): The number of samples in a neighborhood for a point to be considered as a core point. Defaults to 5.
-        metric (str): The metric to use when calculating distance between instances in a feature array. Defaults to 'euclidean'.
+        metric (str): The metric to use when calculating distance between instances in a feature array. Defaults to 'euclabel_idean'.
     Returns:
         np.ndarray: Cluster labels for each point in the UMAP-transformed data.
     """
@@ -179,11 +179,11 @@ def nemi_func(dfn, n_clusters=9, min_dist=0.5, umap_neighbors=200, hclust_neighb
 
 
 # Finds clusters in different ensembles that has largest overlap with clusters in the base_label (ensemble 0 in this case)
-def assess_overlap(ensembles, lid=0, n_ens=50, max_clusters=None):
+def assess_overlap(ens_labels, label_id=0, num_members=50, max_clusters=None):
 
-    base_id = copy.deepcopy(lid)
-    base_labels = ensembles[base_id]
-    compare_ids = [i for i in range(n_ens)]
+    base_id = copy.deepcopy(label_id)
+    base_labels = ens_labels[base_id]
+    compare_ids = [i for i in range(num_members)]
     compare_ids.pop(base_id)
     num_clusters = int(np.max(base_labels) + 1)
 
@@ -200,7 +200,7 @@ def assess_overlap(ensembles, lid=0, n_ens=50, max_clusters=None):
     # TODO: add assert statement to make sure that the clusters have been sorted?
 
     # dataVector = [nemi.clusters for id, nemi in enumerate(self.nemi_pack) if id != base_id]
-    dataVector = [ensembles[id] for id, _ in enumerate(ensembles) if id != base_id]
+    dataVector = [ens_labels[id] for id, _ in enumerate(ens_labels) if id != base_id]
 
     # Loop over ensemble members, not including the base member
     for compare_cnt, compare_id in enumerate(compare_ids):
@@ -377,11 +377,11 @@ def overlap_with_nemi_clusters(voteOverlaps, ensembles):
 
 
 # Return sorted overlap for entropy calculation
-def get_sortedOverlap(ensembles, id=0, n_ens=3, max_clusters=None):
+def get_sortedOverlap(ensembles, id=0, num_members=3, max_clusters=None):
 
     base_id = copy.deepcopy(id)
     base_labels = ensembles[base_id]
-    compare_ids = [i for i in range(n_ens)]
+    compare_ids = [i for i in range(num_members)]
     compare_ids.pop(base_id)
     num_clusters = int(np.max(base_labels) + 1)
 
