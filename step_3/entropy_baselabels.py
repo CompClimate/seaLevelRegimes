@@ -20,48 +20,54 @@ from src import aux_func as af # Importing the aux_func module
 
 
 
-def save_entropy_to_csv(lab, emb_params, nc, blid, n_ens, entropy_dir):
+# Define base directory for static files
+base_dir = '/group/maikesgrp/laique/NOAA/nemis'
+
+
+
+def save_entropy_to_csv(labels, emb_params, n_clusters, blid, num_members, entropy_dir):
     """
     Calculate entropy and save it to CSV files.
 
     Args:
-        lab (np.ndarray): Labels array.
+        labels (np.ndarray): Ensemble labels array.
         emb_params (list): List of combinations of used parameters - minimum distances & UMAP nearest neighhbors.
-        nc (int): Number of clusters.
+        n_clusters (int): Number of clusters.
         blid (int): Base ID.
-        n_ens (int): Number of ensembles.
+        num_members (int): Number of ensemble members.
         entropy_dir (str): Directory to save the entropy output files.
     """
     # Create output directory if it doesn't exist
-    output_dir = f'{entropy_dir}/nclusters_{nc}'
-    os.makedirs(output_dir, exist_ok=True)
-    print(f"\nEntropy output directory created at: {output_dir}")
+    output_dir = f'{entropy_dir}/nclusters_{n_clusters}/base_labels'
+    print(f"\nCreating <{output_dir}> if it doesn't exist ...")
+    af.make_dirs(output_dir)
     
     for id, nkey in enumerate(emb_params):
-        outfile = f'{output_dir}/base_label_id_{blid}_n_neighbors_{nkey[0]}_min_dist_{nkey[1]}_entropy.csv'
+        filename = "entropy_base_label_id_{blid}_nn_{nkey[0]}_md_{nkey[1]}.csv"
+        output_filename = f'{output_dir}/{filename}'
 
-        if not os.path.exists(outfile):
-            df_ent = af.get_ent_for_all_params(lab, param_id=id, baselab_id=blid, n_ens=n_ens)
-            df_ent.to_csv(outfile, index=False)
-            print(f"Entropy saved to: {outfile}")
+        if not os.path.exists(output_filename):
+            df_ent = af.get_ent_for_all_params(labels=labels, param_id=id, baselab_id=blid, num_members=num_members)
+            df_ent.to_csv(output_filename, index=False)
+            print(f"Entropy saved as: <{filename}>")
         else:
-            print(f"File {outfile} already exists. Skipping ...")
+            print(f"File <{output_filename}> already exists. Skipping ...")
 
 
 
-def run_entropy_blabel(nc:int, blid:int, region:str='Global', scaler:str='Standard', n_ens:int=20):
+def run_entropy_blabel(n_clusters:int, resolution:str, field:str, blid:int, num_members:int=20):
     """
     Main function to execute the entropy calculation for a given cluster and a specific base label ID
     
     Args:
-        nc (int): Number of clusters.
+        n_clusters (int): Number of clusters.
+        resolution (str): Resolution of the data.
+        field (str): 'mean' for statics and anything else for dynamics.
         blid (int): Base ID.
-        region (str, optional): Region of interest. Defaults to 'Global'.
-        scaler (str, optional): Data scaler used. Defaults to 'Standard'.
-        n_ens (int, optional): Number of ensembles. Defaults to 20.
+        num_members (int, optional): Number of ensemble members. Defaults to 20.
     """ 
     # List of UMAP key parameter combinations - minimum distances & nearest neighhbors.
-    emb_params = af.UMAP_KNN_MIN_DIST
+    emb_params = af.UMAP_NNS_MDS
     
     print("\n-------------- STARTING COMPUTING ENTROPY ----------------\n")
 
@@ -69,31 +75,37 @@ def run_entropy_blabel(nc:int, blid:int, region:str='Global', scaler:str='Standa
     start_now = nf.time_now()
     print(f"Process started at: {start_now}")
     
-    print(f"Ensembles = {n_ens}")
-    print(f"Base label ID = {blid}")
-    print(f'NEMI Param: n_cluster = {nc}')
-    print(f'NEMI Param: Ensemble as base_label_id = {blid}')
-    print(f"Region of interest: {region}")
-    print(f"Data scaler used: {scaler}") 
-
-    # Define the base directory
-    base_dir = f'/group/maikesgrp/laique/NOAA/nemis/{region}/{scaler}'
+    print(f"{'='*7} Key Parameters Used {'='*7}")
+    print(f"{' '*5}• Number of ensemble members = {num_members}")
+    print(f"{' '*5}• Member base label ID = {blid}")
+    print(f"{' '*5}• Cluster complexity level = {n_clusters}")
     
-    # Define data base directory and load clusters data
-    clusters_dir = f'{base_dir}/clusterings'
-    sorted_nclusters_dict, ncluster_size = af.load_clusters(nc=nc, clusters_dir=clusters_dir)
-
-    # Define constants
-    n_pts = copy.deepcopy(ncluster_size)
+    # Declare embedding and clustering directories
+    if field == 'mean':
+        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/clusterings'
+        entropy_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/entropy'
+    else:
+        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/clusterings'
+        entropy_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/entropy'
+    
+    # Load clusters data
+    af.log_info(f"Loading embedded clusters associated with: #cluters={n_clusters} ...")
+    sorted_nclusters_dict, ncluster_size = af.load_clusters(clust_dir=clust_dir, n_clusters=n_clusters)
     
     # Create and fill a labels array with cluster data
-    lab = af.fill_labels_array(sorted_nclusters_dict=sorted_nclusters_dict,
-                               emb_params=emb_params, n_ens=n_ens, n_pts=n_pts)
+    af.log_info("Creating and filling cluster labels array ...")
+    n_pts = copy.deepcopy(ncluster_size)
+    labels = af.fill_labels_array(sorted_nclusters_dict=sorted_nclusters_dict,
+                                  emb_params=emb_params, num_members=num_members, n_pts=n_pts)
     
-    # Define entropy directory and save entropy to CSV
-    entropy_dir = f'{base_dir}/entropy'
-    save_entropy_to_csv(lab=lab, emb_params=emb_params, nc=nc, blid=blid,
-                        n_ens=n_ens, entropy_dir=entropy_dir)
+    # Ensure entropy output directory exists
+    af.log_info(f"Creating <{entropy_dir}> if it doesn't exist ...")
+    af.make_dirs(entropy_dir)
+    
+    # Compute and save entropy to CSV
+    af.log_info("Calculating and saving entropy to CSV files ...")
+    save_entropy_to_csv(labels=labels, emb_params=emb_params, n_clusters=n_clusters, blid=blid,
+                        num_members=num_members, entropy_dir=entropy_dir)
     
     # Record the end time
     end_now = nf.time_now()
@@ -112,18 +124,19 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # Parse command-line arguments
-    if len(sys.argv) != 5:
-        print("Usage: python entropy_baselabels.py <n_clusters> <base_id> <region> <scaler>")
+    if len(sys.argv) != 3:
+        print("Usage: python entropy_baselabels.py <n_clusters> <base_id>")
         sys.exit(1)
 
-    nc = int(sys.argv[1])
+    n_clusters = int(sys.argv[1])
     blid = int(sys.argv[2])
-    region = sys.argv[3]
-    scaler = sys.argv[4]
-    n_ens = 20 # Number of ensembles. Defaults to 20.
+    num_members = 20 # Number of ensemble members. Defaults to 20.
+    resolution = 'p125' 
+    field = 'mean'  # for 'statics' or 'dynamics', depending on your data
     
     # Call and run the entropy based label main function
-    run_entropy_blabel(nc=nc, blid=blid, region=region, scaler=scaler, n_ens=n_ens)
+    run_entropy_blabel(n_clusters=n_clusters, resolution=resolution,
+                       field=field, blid=blid, num_members=num_members)
     
     # Record the end time
     end_time = time.time()
