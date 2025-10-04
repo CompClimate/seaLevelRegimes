@@ -39,11 +39,11 @@ def get_ent(df):
     return df_c
 
 
-def get_overlap(ensembles, id=0, n_ens=3, max_clusters=None):
+def get_overlap(ens_labels, id=0, num_members=3, max_clusters=None):
 
     base_id = id
-    base_labels = ensembles[base_id]
-    compare_ids = [i for i in range(n_ens)]
+    base_labels = ens_labels[base_id]
+    compare_ids = [i for i in range(num_members)]
     compare_ids.pop(base_id)
 
     num_clusters = int(np.max(base_labels) + 1)
@@ -61,7 +61,7 @@ def get_overlap(ensembles, id=0, n_ens=3, max_clusters=None):
     # TODO: add assert statement to make sure that the clusters have been sorted?
 
     # dataVector = [nemi.clusters for id, nemi in enumerate(self.nemi_pack) if id != base_id]
-    dataVector = [ensembles[id] for id, nemi in enumerate(ensembles) if id != base_id]
+    dataVector = [ens_labels[id] for id, nemi in enumerate(ens_labels) if id != base_id]
 
     # Loop over ensemble members, not including the base member
     for compare_cnt, compare_id in enumerate(compare_ids):
@@ -133,7 +133,7 @@ def get_overlap(ensembles, id=0, n_ens=3, max_clusters=None):
 
     return sortedOverlap
 
-def get_ent_for_all_params(lab, param_id=0, baselab_id=0, n_ens=50):
+def get_ent_for_all_params(labels, param_id=0, baselab_id=0, num_members=50):
 
     """
     param_id - index for umap param combination
@@ -143,8 +143,8 @@ def get_ent_for_all_params(lab, param_id=0, baselab_id=0, n_ens=50):
     now = datetime.now()
     # print("base_label = "+str(baselab_id), now.strftime("%H:%M:%S"))
 
-    labels = lab[param_id, :, :]
-    sortedOverlap = get_overlap(labels, id=baselab_id, n_ens=n_ens)
+    labs = labels[param_id, :, :]
+    sortedOverlap = get_overlap(ens_labels=labs, id=baselab_id, num_members=num_members)
     sortedOverlap_ = np.nan_to_num(sortedOverlap) # nan to zero
     df = pd.DataFrame(np.argmax(sortedOverlap_, axis=1)).T
     df = df.astype('int64')
@@ -179,24 +179,25 @@ def get_numbers_from_filename(filename):
     Returns:
         list[str]: A list of digit sequences found in the filename.
     """
+    import re
     return re.findall(r'\d+', filename)
 
 
 
-def load_clusters(nc: int, clusters_dir: str) -> tuple[OrderedDict, int]:
+def load_clusters(clust_dir:str, n_clusters:int) -> tuple[OrderedDict, int]:
     """
     Load cluster data from the specified directory.
 
     Args:
-        nc (int): Number of clusters.
-        clusters_dir (str): Path to the directory containing cluster files.
+        n_clusters (int): Number of clusters.
+        clust_dir (str): Path to the directory containing cluster files.
 
     Returns:
         OrderedDict: A dictionary of cluster data sorted by keys.
         int: The size of the cluster data array.
     """
     # Define data directory and the filenames to process
-    nclusters_dir = f'{clusters_dir}/nclusters_{nc}'
+    nclusters_dir = f'{clust_dir}/nclusters_{n_clusters}'
     
     # Initialize an empty dictionary to store cluster data
     nclusters_dict = {}
@@ -213,9 +214,9 @@ def load_clusters(nc: int, clusters_dir: str) -> tuple[OrderedDict, int]:
                 ens = int(num[0])
 
             md = float(num[1] + '.' + num[2])
-            knn = int(num[3])
+            nn = int(num[3])
 
-            nclusters_dict[(ens, knn, md)] = cluster
+            nclusters_dict[(ens, nn, md)] = cluster
     
     # Get the cluster data array size
     if cluster is None:
@@ -230,15 +231,15 @@ def load_clusters(nc: int, clusters_dir: str) -> tuple[OrderedDict, int]:
 
 
 
-def fill_labels_array(sorted_nclusters_dict: OrderedDict,
-                      emb_params: list, n_ens: int, n_pts: int) -> np.ndarray:
+def fill_labels_array(sorted_nclusters_dict:OrderedDict,
+                      emb_params:list, num_members:int, n_pts:int) -> np.ndarray:
     """
     Fill a labels array with cluster data.
 
     Args:
         sorted_nclusters_dict (OrderedDict): Dictionary of cluster data as output of load_clusters.
         emb_params (list[tuple]): List of UMAP key parameter combinations - minimum distances & nearest neighhbors.
-        n_ens (int): Number of ensembles.
+        num_members (int): Number of ensemble members.
         n_pts (int): Number of points.
         
     Returns:
@@ -249,33 +250,33 @@ def fill_labels_array(sorted_nclusters_dict: OrderedDict,
     n_param = len(emb_params)
     
     # Initialize labels array
-    labels = np.zeros((n_param, n_ens, n_pts)) * np.nan
+    labels = np.zeros((n_param, num_members, n_pts)) * np.nan
     
     # Fill the labels array with clusters
-    for k1, k2 in enumerate(range(1, n_ens + 1)):
-        for idx, (knn, md) in enumerate(emb_params):
-            labels[idx, k1, :] = sorted_nclusters_dict[(k2, knn, md)]
+    for k1, k2 in enumerate(range(1, num_members + 1)):
+        for idx, (nn, md) in enumerate(emb_params):
+            labels[idx, k1, :] = sorted_nclusters_dict[(k2, nn, md)]
             
     return labels
 
 
 # List of UMAP key parameter combinations - minimum distances & nearest neighhbors.
-UMAP_KNN_MIN_DIST = [(5, 0.1), (5, 0.3), (5, 0.5), (5, 0.7), (5, 0.9),
-                     (10, 0.1), (10, 0.3), (10, 0.5), (10, 0.7), (10, 0.9),
-                     (50, 0.1), (50, 0.3), (50, 0.5), (50, 0.7), (50, 0.9),
-                     (100, 0.1), (100, 0.3), (100, 0.5), (100, 0.7), (100, 0.9),
-                     (200, 0.1), (200, 0.3), (200, 0.5), (200, 0.7), (200, 0.9)]
+UMAP_NNS_MDS = [(5, 0.1), (5, 0.3), (5, 0.5), (5, 0.7), (5, 0.9),
+                (10, 0.1), (10, 0.3), (10, 0.5), (10, 0.7), (10, 0.9),
+                (50, 0.1), (50, 0.3), (50, 0.5), (50, 0.7), (50, 0.9),
+                (100, 0.1), (100, 0.3), (100, 0.5), (100, 0.7), (100, 0.9),
+                (200, 0.1), (200, 0.3), (200, 0.5), (200, 0.7), (200, 0.9)]
 
 bvb_terms = ['beta_V', 'BPT', 'Mass_flux', 'eta_dt', 'Curl_dudt', 'Curl_taus', 'Curl_taub', 'Curl_Adv', 'Curl_diff']
 
 
-def reconstruct_DataArray(original_ds, embedded_nclusters_array) -> xr.Dataset:
+def reconstruct_DataArray(bvb_ds, embedded_nclusters_array) -> xr.Dataset:
     """
     Reconstruct the dataset with embedded clusters while preserving original 
     NaN patterns. Create an xarray Dataset from the cluster array data. 
     
     Args:
-        original_ds (xarray.Dataset): Original xarray Dataset with NaN patterns.
+        bvb_ds (xarray.Dataset): Original xarray Dataset with NaN patterns.
         embedded_nclusters_array (numpy.ndarray): Array of embedded clusters.
         
     Returns:
@@ -283,12 +284,12 @@ def reconstruct_DataArray(original_ds, embedded_nclusters_array) -> xr.Dataset:
     """
     # Make a copy of the original xarray Dataset before further preprocessing
     baseline_var = bvb_terms[0]
-    da = original_ds[baseline_var].copy() 
+    da = bvb_ds[baseline_var].copy() 
     
     # Create mask of complete cases (no NaNs in any predictor)
     complete_mask = xr.full_like(da, True, dtype=bool)
     for var in bvb_terms:
-        complete_mask = complete_mask & original_ds[var].notnull()
+        complete_mask = complete_mask & bvb_ds[var].notnull()
         
     # Create full array with NaNs
     full_shape = da.shape

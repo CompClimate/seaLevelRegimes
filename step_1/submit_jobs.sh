@@ -6,10 +6,12 @@
 # The script is designed to be run on a high-performance computing (HPC) cluster.
 
 # Define variables for the script
-# Supported by UC Davis SLURM scheduler 
-ENSEMBLES=(0 5) # Define the ensemble numbers default to 5 (can be adjusted as needed)
+# Supported by UC Davis SLURM scheduler: mermory expensive jobs when run with large ensembles
+ENSEMBLES=(0 5 10 15) # Define the ensemble numbers default to 5 members per ensemble block (can be adjusted as needed). Only if you have enough memory
+# ENSEMBLES=(0 5) # For memebers 1 to 10
 # ENSEMBLES=(10 15) # For memebers 11 to 20
 # ENSEMBLES=(10) # For memebers 11 to 15
+# ENSEMBLES=(15) # For memebers 16 to 20
 UMAP_MDS=(0.1 0.3 0.5 0.7 0.9) # Define the minimum distances (can be adjusted as needed)
 UMAP_NNS=(5 10 50 100 200) # Define the number of neighbors (can be adjusted as needed)
 

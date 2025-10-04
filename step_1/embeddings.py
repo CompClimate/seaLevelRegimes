@@ -92,7 +92,7 @@ def process_embedding(data, member, umap_kwargs, embed_dir, scaler=None):
         return embedding
 
 
-def run_embedding(parquet_file:str, member:int, umap_kwargs:dict, scaler:str):
+def run_embedding(parquet_file:str, resolution:str, field:str, member:int, umap_kwargs:dict, scaler:str):
     """
     Main function to execute the embedding process. This function reads
     the input data, applies UMAP for dimmemberionality reduction, and saves 
@@ -102,6 +102,7 @@ def run_embedding(parquet_file:str, member:int, umap_kwargs:dict, scaler:str):
     Args:
         parquet_file (str): Path to the input parquet file.
         resolution (str): Resolution of the CM4X data, e.g., 'p125' for CM4X-p125.
+        field (str): 'mean' for statics and anything else for dynamics.
         member (int): memberemble number.
         scaler: sklearn-like transformer, optional
         A scaler (e.g., StandardScaler) to normalize the data.
@@ -125,12 +126,8 @@ def run_embedding(parquet_file:str, member:int, umap_kwargs:dict, scaler:str):
     af.log_info("Loading data ...")
     data = pd.read_parquet(parquet_file)
     data = data.values
-    
-    # Get resolution from the file path
-    resolution = parquet_file.split('/')[-1].split('-')[-1].split('_')[0]
 
     # Define embedding output directory
-    field = parquet_file.split('/')[-1].split('.')[0].split('_')[-1]
     if field == 'mean':
         embed_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/embeddings'
     else:
@@ -141,7 +138,9 @@ def run_embedding(parquet_file:str, member:int, umap_kwargs:dict, scaler:str):
     af.make_dirs(embed_dir)
     
     # Process embeddings
+    af.log_info('Started the Manifold Representation Learning.')
     embedding = process_embedding(data, member, umap_kwargs, embed_dir, scaler)
+    af.log_info('Completed the Manifold Representation Learning.')
 
     # Record and print the completion time
     end = nf.time_now()
@@ -168,6 +167,8 @@ if __name__ == "__main__":
     member = int(sys.argv[2])
     umap_kwargs = {"umap_md": float(sys.argv[3]),
                    "umap_nn": int(sys.argv[4])}
+    resolution = 'p125' 
+    field = 'mean'  # for 'statics' or 'dynamics', depending on your data
     scaler = None
     
     # Call and run the embedding main function

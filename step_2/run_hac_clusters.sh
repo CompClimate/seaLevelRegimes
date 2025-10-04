@@ -1,7 +1,7 @@
 #!/bin/bash 
 #SBATCH -p med2
 
-#SBATCH --time=08:00:00
+#SBATCH --time=10:00:00
 #SBATCH --nodes=1
 
 #SBATCH --ntasks=1

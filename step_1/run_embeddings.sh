@@ -1,7 +1,7 @@
 #!/bin/bash 
 #SBATCH -p med2
 
-#SBATCH --time=08:00:00
+#SBATCH --time=10:00:00
 #SBATCH --nodes=1
 
 #SBATCH --ntasks=1
@@ -28,7 +28,7 @@ PYTHON_SCRIPT="/home/djeutsch/Projects/seaLevelRegimes/step_1/embeddings.py"
 
 # Define the ensemble number, minimum distance, number of neighbors, region, and data scaler
 MEMBER=$1 # Ensemble number passed as an argument
-MIN_DIST=$2 # Minimum distance passed as an argument
+UMAP_MD=$2 # Minimum distance passed as an argument
 UMAP_NN=$3 # Number of neighbors passed as an argument
 DATA_PATH=$4 # Path to the data file passed as an argument
 
@@ -43,11 +43,11 @@ do
 
     # Create a unique log file for each combination
     
-    LOGFILE="/home/djeutsch/Projects/seaLevelRegimes/step_1/dumps/python/ENS${MEMBER}_MD${MIN_DIST}_NN${UMAP_NN}.log"
+    LOGFILE="/home/djeutsch/Projects/seaLevelRegimes/step_1/dumps/python/ENS${MEMBER}_MD${UMAP_MD}_NN${UMAP_NN}.log"
     
     # Run the Python script with the specified parameters and redirect output to the log file
     echo "Running embedding Python script for: member = ${MEMBER}, min_dist = ${MIN_DIST}, n_neighbors = ${UMAP_NN}"
-    python -u "$PYTHON_SCRIPT" "$DATA_PATH"  "$MEMBER" "$MIN_DIST" "$UMAP_NN" > "$LOGFILE" &
+    python -u "$PYTHON_SCRIPT" "$DATA_PATH" "$MEMBER" "$UMAP_MD" "$UMAP_NN" > "$LOGFILE" &
 done
 wait # Wait for all background processes to finish
 
