@@ -1,0 +1,21 @@
+# Recommended minimal versions (adjust as needed). Use:
+#   python -m pip install -r requirements.txt
+#
+# Core dependencies
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+xarray>=2024.01
+scikit-learn>=1.2
+umap-learn>=0.5
+matplotlib>=3.6
+joblib>=1.2
+
+# Optional / parallel
+dask>=2023.11    # optional: distributed computation
+
+# Optional / deep learning (only if needed)
+# Uncomment to install TensorFlow (CPU). For GPU builds, install the appropriate tensorflow package manually.
+# tensorflow>=2.11
+
+# End of file
