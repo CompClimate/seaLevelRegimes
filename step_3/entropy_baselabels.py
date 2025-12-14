@@ -3,14 +3,18 @@ This file calculates entropy for one base label
 Exports to dataframe
 This script is run in parallel for all base label IDs using a bash script
 """
-
+import io
 import os
 import sys
 import time
 import copy
 
+# Ensure UTF-8 encoding for stdout
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8") 
+
 # Add path to local modules and import them
-source = os.path.abspath('/home/djeutsch/Projects/seaLevelRegimes')
+source = os.path.abspath('/home/Laique.Djeutchouang/DEVs/BV-Regimes/NEMI/seaLevelRegimes')
 if source not in sys.path:
     sys.path.insert(1, source)
 
@@ -18,11 +22,8 @@ from src import nemi_func as nf # Importing the nemi_func module
 from src import aux_func as af # Importing the aux_func module
 
 
-
-
 # Define base directory for static files
-base_dir = '/group/maikesgrp/laique/NOAA/nemis'
-
+base_dir = '/work/lnd/CM4X/NEMI'
 
 
 def save_entropy_to_csv(labels, emb_params, n_clusters, blid, num_members, entropy_dir):
@@ -55,15 +56,15 @@ def save_entropy_to_csv(labels, emb_params, n_clusters, blid, num_members, entro
 
 
 
-def run_entropy_blabel(n_clusters:int, resolution:str, field:str, blid:int, num_members:int=20):
+def run_entropy_blabel(data_res:str, data_field:str, blid:int, n_clusters:int, num_members:int=20):
     """
     Main function to execute the entropy calculation for a given cluster and a specific base label ID
     
     Args:
-        n_clusters (int): Number of clusters.
-        resolution (str): Resolution of the data.
-        field (str): 'mean' for statics and anything else for dynamics.
+        data_res (str): Resolution of the data.
+        data_field (str): 'statics' (mean) or 'dynamics' (e.g.; monthly climatology).
         blid (int): Base ID.
+        n_clusters (int): Number of clusters.
         num_members (int, optional): Number of ensemble members. Defaults to 20.
     """ 
     # List of UMAP key parameter combinations - minimum distances & nearest neighhbors.
@@ -81,12 +82,14 @@ def run_entropy_blabel(n_clusters:int, resolution:str, field:str, blid:int, num_
     print(f"{' '*5}• Cluster complexity level = {n_clusters}")
     
     # Declare embedding and clustering directories
-    if field == 'mean':
-        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/clusterings'
-        entropy_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/entropy'
+    if data_field == 'statics':
+        clust_dir = f'{base_dir}/CM4X-{data_res}/outputs/statics/clusterings'
+        entropy_dir = f'{base_dir}/CM4X-{data_res}/outputs/statics/entropy'
+    elif data_field == 'dynamics':
+        clust_dir = f'{base_dir}/CM4X-{data_res}/outputs/dynamics/clusterings'
+        entropy_dir = f'{base_dir}/CM4X-{data_res}/outputs/dynamics/entropy'
     else:
-        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/clusterings'
-        entropy_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/entropy'
+        raise ValueError(f"Unknown field: {data_field}. Must be 'statics (mean)' or 'dynamics' (e.g.; monthly climatology).")
     
     # Load clusters data
     af.log_info(f"Loading embedded clusters associated with: #cluters={n_clusters} ...")
@@ -124,19 +127,19 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # Parse command-line arguments
-    if len(sys.argv) != 3:
-        print("Usage: python entropy_baselabels.py <n_clusters> <base_id>")
+    if len(sys.argv) != 5:
+        print("Usage: python entropy_baselabels.py <data_res> <data_field> <base_id> <n_clusters>")
         sys.exit(1)
 
-    n_clusters = int(sys.argv[1])
-    blid = int(sys.argv[2])
+    data_res = sys.argv[1]
+    data_field = sys.argv[2]
+    blid = int(sys.argv[3])
+    n_clusters = int(sys.argv[4])
     num_members = 20 # Number of ensemble members. Defaults to 20.
-    resolution = 'p125' 
-    field = 'mean'  # for 'statics' or 'dynamics', depending on your data
     
     # Call and run the entropy based label main function
-    run_entropy_blabel(n_clusters=n_clusters, resolution=resolution,
-                       field=field, blid=blid, num_members=num_members)
+    run_entropy_blabel(data_res=data_res, data_field=data_field,
+                       blid=blid, n_clusters=n_clusters, num_members=num_members)
     
     # Record the end time
     end_time = time.time()

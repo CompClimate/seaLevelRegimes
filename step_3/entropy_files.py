@@ -4,6 +4,7 @@ It dentifies the base label ID with the least entropy. Finally, it exports entro
 files with respect to that base_label
 """
 
+import io
 import os
 import sys
 import re
@@ -14,8 +15,12 @@ import numpy as np
 import pandas as pd
 from collections import OrderedDict
 
+# Ensure UTF-8 encoding for stdout
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8") 
+
 # Add path to local modules and import them
-source = os.path.abspath('/home/djeutsch/Projects/seaLevelRegimes')
+source = os.path.abspath('/home/Laique.Djeutchouang/DEVs/BV-Regimes/NEMI/seaLevelRegimes')
 if source not in sys.path:
     sys.path.insert(1, source)
 
@@ -23,10 +28,8 @@ from src import nemi_func as nf # Importing the nemi_func module
 from src import aux_func as af # Importing the aux_func module
 
 
-
 # Define base directory for static files
-base_dir = '/group/maikesgrp/laique/NOAA/nemis'
-
+base_dir = '/work/lnd/CM4X/NEMI'
 
 
 def load_cluster_based_entropy(entropy_dir:str, n_clusters:int) -> OrderedDict:
@@ -137,8 +140,8 @@ def process_clusters_entropy(clust_dir:str, n_clusters:int, lst:list,
     Process clusters and calculate entropy for each parameter combination.
 
     Args:
+        clust_dir (str): Directory where the cluster files are stored.
         n_clusters (int): Number of clusters.
-        resolution (str): Resolution of the data.
         lst (list): List of base labels with minimum entropy.
         emb_params (list[tuple]): List of UMAP key parameter combinations - minimum distances & nearest neighhbors.
         entropy_dir (str): Directory to save the entropy output files.
@@ -188,14 +191,14 @@ def process_clusters_entropy(clust_dir:str, n_clusters:int, lst:list,
 
 
 
-def run_entropy_file(n_clusters:int, resolution:str, field:str, num_members:int=20):
+def run_entropy_file(data_res:str, data_field:str, n_clusters:int, num_members:int=20):
     """
     Main function to execute the entropy calculation for a given cluster.
     
     Args:
+        data_res (str): Resolution of the data.
+        data_field (str): 'statics' (mean) or 'dynamics' (e.g.; monthly climatology).
         n_clusters (int): Number of clusters.
-        resolution (str): Resolution of the data.
-        field (str): 'mean' for statics and anything else for dynamics.
         num_members (int, optional): Number of ensembles. Defaults to 20.
     """ 
     # List of UMAP key parameter combinations - minimum distances & nearest neighhbors.
@@ -212,12 +215,14 @@ def run_entropy_file(n_clusters:int, resolution:str, field:str, num_members:int=
     print(f"{' '*5}• Cluster complexity level = {n_clusters}")
     
     # Declare embedding and clustering directories
-    if field == 'mean':
-        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/clusterings'
-        entropy_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/entropy'
+    if data_field == 'statics':
+        clust_dir = f'{base_dir}/CM4X-{data_res}/outputs/statics/clusterings'
+        entropy_dir = f'{base_dir}/CM4X-{data_res}/outputs/statics/entropy'
+    elif data_field == 'dynamics':
+        clust_dir = f'{base_dir}/CM4X-{data_res}/outputs/dynamics/clusterings'
+        entropy_dir = f'{base_dir}/CM4X-{data_res}/outputs/dynamics/entropy'
     else:
-        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/clusterings'
-        entropy_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/entropy'
+        raise ValueError(f"Unknown field: {data_field}. Must be 'statics (mean)' or 'dynamics' (e.g.; monthly climatology).")
 
     # Load and concatenate ncluster-based entropy data for all base label IDs.
     concatenate_entropy_data(n_clusters=n_clusters, emb_params=emb_params, entropy_dir=entropy_dir)
@@ -249,18 +254,19 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # Check if the correct number of command-line arguments are provided
-    if len(sys.argv) != 2:
-        print("Usage: python entropy_files.py <n_clusters>")
+    if len(sys.argv) != 4:
+        print("Usage: python entropy_files.py <data_res> <data_field> <n_clusters>")
         sys.exit(1)
     
     # Parse command-line arguments
-    n_clusters = int(sys.argv[1])
+    data_res = sys.argv[1]
+    data_field = sys.argv[2]
+    n_clusters = int(sys.argv[3])
     num_members = 20 # Number of ensemble members. Defaults to 20.
-    resolution = 'p125' 
-    field = 'mean'  # for 'statics' or 'dynamics', depending on your data
     
     # Call and run the entropy file processing
-    run_entropy_file(n_clusters=n_clusters, resolution=resolution, field=field, num_members=num_members)
+    run_entropy_file(data_res=data_res, data_field=data_field,
+                     n_clusters=n_clusters, num_members=num_members)
     
     # Record the end time
     end_time = time.time()
