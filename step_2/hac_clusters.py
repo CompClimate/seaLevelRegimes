@@ -1,12 +1,17 @@
 # Script to create and export sorted clusters
 
+import io
 import os
 import sys
 import time
 import numpy as np
 
+# Ensure UTF-8 encoding for stdout
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8") 
+
 # Add path to local modules and import them
-source = os.path.abspath('/home/djeutsch/Projects/seaLevelRegimes')
+source = os.path.abspath('/home/Laique.Djeutchouang/DEVs/BV-Regimes/NEMI/seaLevelRegimes')
 if source not in sys.path:
     sys.path.insert(1, source)
 
@@ -15,10 +20,7 @@ from src import aux_func as af # Importing the aux_func module
 
 
 # Define base directory for static files
-base_dir = '/group/maikesgrp/laique/NOAA/nemis'
-
-
-
+base_dir = '/work/lnd/CM4X/NEMI'
 
 def load_embeddings(embedding_filename):
     """Load embeddings from a .npy file."""
@@ -30,14 +32,14 @@ def load_embeddings(embedding_filename):
 
 
 
-def run_clustering(member:int, resolution:str, field:str, umap_kwargs:dict, clust_kwargs:dict):
+def run_clustering(data_res:str, data_field:str, member:int, umap_kwargs:dict, clust_kwargs:dict):
     """
     Main function to execute the clustering process. 
     
     Args:
+        data_res (str): Resolution of the data.
+        data_field (str): 'statics' (mean) or 'dynamics' (e.g.; monthly climatology).
         member (int): Ensemble number.
-        resolution (str): Resolution of the data.
-        field (str): 'mean' for statics and anything else for dynamics.
         
         umap_kwargs: Keyword arguments to passed to UMAP.
             UMAP options:
@@ -74,12 +76,14 @@ def run_clustering(member:int, resolution:str, field:str, umap_kwargs:dict, clus
     print(f"{' '*5}• AGGLOMEROTIVE hclust_neighbors  = {hclust_n}") 
 
     # Declare embedding and clustering directories
-    if field == 'mean':
-        embed_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/embeddings'
-        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/statics/clusterings/nclusters_{n_clusters}'
+    if data_field == 'statics':
+        embed_dir = f'{base_dir}/CM4X-{data_res}/outputs/statics/embeddings'
+        clust_dir = f'{base_dir}/CM4X-{data_res}/outputs/statics/clusterings/nclusters_{n_clusters}'
+    elif data_field == 'dynamics':
+        embed_dir = f'{base_dir}/CM4X-{data_res}/outputs/dynamics/embeddings'
+        clust_dir = f'{base_dir}/CM4X-{data_res}/outputs/dynamics/clusterings/nclusters_{n_clusters}'
     else:
-        embed_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/embeddings'
-        clust_dir = f'{base_dir}/CM4X-{resolution}/outputs/dynamics/clusterings/nclusters_{n_clusters}'
+        raise ValueError(f"Unknown field: {data_field}. Must be 'statics (mean)' or 'dynamics' (e.g.; monthly climatology).")
     
     # Generate input data filename
     preffix = f"emb_{member:02d}th_ensemble_md_{umap_md}_nn_{umap_nn}"
@@ -130,22 +134,22 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # Parse command-line arguments
-    if len(sys.argv) != 6:  # 6 arguments + script name
-        print("Usage: python hac_clusters.py <member> <umap_md> <umap_nn> <n_clusters> <hclust_n>")
+    if len(sys.argv) != 8:  # 8 arguments + script name
+        print("Usage: python hac_clusters.py <data_res> <data_field> <member> <umap_md> <umap_nn> <hclust_n> <n_clusters>")
         sys.exit(1)
 
     # Parse command-line arguments
-    member = int(sys.argv[1])
-    umap_kwargs = {"umap_md": float(sys.argv[2]),
-                   "umap_nn": int(sys.argv[3])}
-    clust_kwargs = {"n_clusters": int(sys.argv[4]),
-                    "hclust_n": int(sys.argv[5])}
-    resolution = 'p125' 
-    field = 'mean'  # for 'statics' or 'dynamics', depending on your data
-    
+    data_res = sys.argv[1]
+    data_field = sys.argv[2]
+    member = int(sys.argv[3])
+    umap_kwargs = {"umap_md": float(sys.argv[4]),
+                   "umap_nn": int(sys.argv[5])}
+    clust_kwargs = {"hclust_n": int(sys.argv[6]),
+                    "n_clusters": int(sys.argv[7])}
+
     # Call and run the clustering main function
     af.log_info('Started clustering of learned Manifold Representation.')
-    run_clustering(member=member, resolution=resolution, field=field,
+    run_clustering(data_res=data_res, data_field=data_field, member=member,
                    umap_kwargs=umap_kwargs, clust_kwargs=clust_kwargs)
     af.log_info('Completed clustering of learned Manifold Representation.')
     
