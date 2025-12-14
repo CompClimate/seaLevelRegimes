@@ -16,6 +16,10 @@ NUM_CLUSTS=(3 5 6 7 10 13 15 16 20 25) # Define the number of clusters (can be a
 # NUM_CLUSTS=(3 10) # To run non completed clusterings
 HCLUST_N=40 # Define the number of neighbors for hierarchical clustering (can be adjusted as needed)
 
+# Give the resolution and field for the data
+DATA_RES="p25"
+DATA_FIELD="dynamics" # 'statics' (mean) or 'dynamics' (e.g.; monthly climatology) 
+
 # Seem too large for the job requirements. 
 # ENSEMBLES=($(seq 0 5 45)) # Define the ensemble numbers (can be adjusted as needed)
 
@@ -31,9 +35,10 @@ do
 			do
 				# Submit the job to SLURM for each combination
 				echo
-				echo "Running clustering job for: block_5_ensemble_num = ${member}, min_dist = ${umap_md}"
-				echo "n_neighbors ${umap_nn}, num_clusters=${nc}, hclust_n = ${HCLUST_N}"
-				sbatch --job-name=HAC-$member.$umap_md.$umap_nn.$nc run_hac_clusters.sh "$member" "$umap_md" "$umap_nn" "$nc" "$HCLUST_N"
+				echo "Running clustering job for: block_5_ensemble_num=${member}, min_dist=${umap_md}"
+				echo "n_neighbors ${umap_nn}, num_clusters=${nc}, hclust_n=${HCLUST_N}"
+				sbatch --job-name=HAC-$member.$umap_md.$umap_nn.$nc run_hac_clusters.sh "$DATA_RES" "$DATA_FIELD" "$member" "$umap_md" "$umap_nn" "$HCLUST_N" "$nc"
+				echo
 			done
 		done	
 	done
