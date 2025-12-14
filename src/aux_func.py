@@ -1,3 +1,4 @@
+import io
 import os
 import sys
 import re
@@ -7,7 +8,14 @@ import xarray as xr
 from datetime import datetime
 from collections import OrderedDict
 
-sys.path.insert(1, '/home/djeutsch/Projects/ODRI')
+# Ensure UTF-8 encoding for stdout
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8") 
+
+# Add path to local modules and import them
+source = os.path.abspath('/home/Laique.Djeutchouang/DEVs/BV-Regimes/NEMI/seaLevelRegimes')
+if source not in sys.path:
+    sys.path.insert(1, source)
 from src import nemi_func as nf  # Importing the nemi_func module
 
 
@@ -230,7 +238,6 @@ def load_clusters(clust_dir:str, n_clusters:int) -> tuple[OrderedDict, int]:
 
 
 
-
 def fill_labels_array(sorted_nclusters_dict:OrderedDict,
                       emb_params:list, num_members:int, n_pts:int) -> np.ndarray:
     """
@@ -283,6 +290,7 @@ def reconstruct_DataArray(bvb_ds, embedded_nclusters_array) -> xr.Dataset:
         xarray.Dataset: Dataset containing the reconstructed cluster data.
     """
     # Make a copy of the original xarray Dataset before further preprocessing
+    bvb_ds = bvb_ds[bvb_terms].copy()
     baseline_var = bvb_terms[0]
     da = bvb_ds[baseline_var].copy() 
     

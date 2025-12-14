@@ -20,7 +20,7 @@ from sklearn.cluster import DBSCAN
 
 
 def apply_umap(dfn: np.ndarray, min_dist: float=0.5, umap_neighbors: int=200,
-               learning_rate: float=1.0, n_epochs: int=None, init: str='spectral') -> np.ndarray:
+               learning_rate: float=1.0, n_epochs: int=None, init: str='random') -> np.ndarray:
     """
     Apply UMAP dimensionality reduction.
 
@@ -31,7 +31,7 @@ def apply_umap(dfn: np.ndarray, min_dist: float=0.5, umap_neighbors: int=200,
         learning_rate (float): Number of neighbors for UMAP. Defaults to 1.0.
         n_epochs (int): Optional, defaults to None. The number of training epochs to be
                         used in optimizing the low dimensional embedding.
-        init (str): Initialization method for UMAP. Defaults to 'spectral'.
+        init (str): Initialization method for UMAP. Defaults to 'random'.
 
     Returns:
         np.ndarray: UMAP-transformed data.
