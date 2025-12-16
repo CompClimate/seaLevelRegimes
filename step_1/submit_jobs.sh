@@ -18,8 +18,9 @@ UMAP_NNS=(5 10 50 100 200) # Define the number of neighbors (can be adjusted as 
 # Seem too large for the job requirements. 
 # ENSEMBLES=($(seq 0 5 45)) # Define the ensemble numbers (can be adjusted as needed)
 
-# Define the data domain, path and the scaling method
-DATA_PATH="/group/maikesgrp/laique/NOAA/nemis/CM4X-p125/inputs/glob_scaled_CM4X-p125_BV_budget_time_mean.parquet" # Path to your data file
+# Give the resolution and field for the data
+DATA_RES="p25"
+DATA_FIELD="dynamics" # 'statics' (mean) or 'dynamics' (e.g.; monthly climatology) 
 
 echo
 
@@ -31,8 +32,9 @@ do
 		do
 			# Submit the job to SLURM for each combination
 			echo
-			echo "Running embedding job for: block_5_ensemble_num = ${member}, min_dist = ${umap_md}, n_neighbors = ${umap_nn}"
-			sbatch --job-name=Emb-$member.$umap_md.$umap_nn run_embeddings.sh "$member" "$umap_md" "$umap_nn" "$DATA_PATH" 
+			echo "Running embedding job for: block_5_ensemble_num=${member}, min_dist=${umap_md}, n_neighbors=${umap_nn}"
+			sbatch --job-name=Emb-$member.$umap_md.$umap_nn run_embeddings.sh "$member" "$umap_md" "$umap_nn" "$DATA_RES" "$DATA_FIELD"
+			echo
 		done	
 	done
 done

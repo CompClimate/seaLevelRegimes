@@ -1,32 +1,37 @@
-#!/bin/bash 
-#SBATCH -p med2
+#!/bin/bash
+#SBATCH --job-name=CLUSTERING
+#SBATCH --account=gfdl_o
+#SBATCH --partition=analysis 
+#SBATCH --constraint=bigmem 
 
-#SBATCH --time=10:00:00
 #SBATCH --nodes=1
+#SBATCH --mem=512G
+#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=2
 
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=64
-#SBATCH --mem=400G
+#SBATCH -o dumps/slurm/nemi_job_%j.out
+#SBATCH -e dumps/slurm/nemi_job_%j.err
 
-#SBATCH --account=adamgrp
-
-#SBATCH -o dumps/slurm/job_log_%j.output
-#SBATCH -e dumps/slurm/job_log_%j.error
 
 # Computing requirements
 module purge
 module load conda
 
-# Activate the environment
-conda activate proc_env
+# Activate the desired environment
+conda activate /work/lnd/ODRI/CONDA/conda_envs/nemi_env
 
 ######### Define Variables for the Script #########
 # These values are passed as arguments to the script
 
-# Path to your Python script
-PYTHON_SCRIPT="/home/djeutsch/Projects/seaLevelRegimes/step_4/regimes_identifier.py" 
+# Base directory for the project
+BASE_DIR="/home/Laique.Djeutchouang/DEVs/BV-Regimes/NEMI/seaLevelRegimes/step_4"
 
-NUM_CLUST=$1 # Number of clusters passed as an argument
+# Path to your Python script
+PYTHON_SCRIPT="${BASE_DIR}/regimes_identifier.py" 
+
+DATA_RES=$1 # Data resolution passed as an argument
+DATA_FIELD=$2 # Data field passed as an argument
+NUM_CLUST=$3 # Number of clusters passed as an argument
 
 # Loop through each combination of ensemble and minimum distance
 echo
@@ -35,11 +40,11 @@ echo
 set -e
 
 # Create a unique log file for each combination
-LOGFILE="/home/djeutsch/Projects/seaLevelRegimes/step_4/dumps/python/regimes_NC${NUM_CLUST}.log"
+LOGFILE="${BASE_DIR}/dumps/python/regimes_NC${NUM_CLUST}.log"
 
 echo "Running NEMI clusters Python script for:"
 echo " num_cluster=${NUM_CLUST}"
-python -u "$PYTHON_SCRIPT" "$NUM_CLUST" > "$LOGFILE"
+python -u "$PYTHON_SCRIPT" "$DATA_RES" "$DATA_FIELD" "$NUM_CLUST" > "$LOGFILE"
 
 echo
 # End of script
