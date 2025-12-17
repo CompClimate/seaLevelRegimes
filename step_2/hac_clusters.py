@@ -54,6 +54,9 @@ def run_clustering(data_res:str, data_field:str, member:int, umap_kwargs:dict, c
             Agglomerative options:
                 - n_clusters (int) defaults to 3
                 - hclust_n (int) defaults to 40
+                - n_jobs (int): number of parallel jobs to run (defaults to -1)
+    Returns:
+        None
     """
     
     print("\n-------------- STARTING CLUSTERING ----------------\n")
@@ -109,7 +112,7 @@ def run_clustering(data_res:str, data_field:str, member:int, umap_kwargs:dict, c
         if not os.path.exists(output_filename):
             
             embedding = load_embeddings(input_filename) # Load embedding
-            clusters = nf.get_sorted_clusters(df_umap=embedding, n_clusters=n_clusters, hclust_neighbors=hclust_n) # Perform clustering
+            clusters = nf.get_sorted_clusters(df_umap=embedding, n_clusters=n_clusters, hclust_neighbors=hclust_n, n_jobs=n_jobs) # Perform clustering
             np.save(output_filename, clusters) # Save clusters
             
         else:
@@ -127,6 +130,9 @@ def run_clustering(data_res:str, data_field:str, member:int, umap_kwargs:dict, c
 
 
 if __name__ == "__main__":
+    import sys
+    import os
+    import time
     
     print("\n-------------- READING COMMAND-LINE ARGUMENTS ----------------\n")
     
@@ -145,7 +151,9 @@ if __name__ == "__main__":
     umap_kwargs = {"umap_md": float(sys.argv[4]),
                    "umap_nn": int(sys.argv[5])}
     clust_kwargs = {"hclust_n": int(sys.argv[6]),
-                    "n_clusters": int(sys.argv[7])}
+                    "n_clusters": int(sys.argv[7]),
+                    "n_jobs": int(os.environ.get("SLURM_CPUS_PER_TASK", 1)), # Use allocated CPUs or number of threads
+                    }
 
     # Call and run the clustering main function
     af.log_info('Started clustering of learned Manifold Representation.')

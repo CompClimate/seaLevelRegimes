@@ -19,8 +19,8 @@ from sklearn.neighbors import kneighbors_graph
 from sklearn.cluster import DBSCAN
 
 
-def apply_umap(dfn: np.ndarray, min_dist: float=0.5, umap_neighbors: int=200,
-               learning_rate: float=1.0, n_epochs: int=None, init: str='random') -> np.ndarray:
+def apply_umap(dfn:np.ndarray, min_dist:float=0.5, umap_neighbors:int=200,
+               learning_rate:float=1.0, n_epochs: int=None, init:str='random', n_jobs:int=-1) -> np.ndarray:
     """
     Apply UMAP dimensionality reduction.
 
@@ -32,6 +32,7 @@ def apply_umap(dfn: np.ndarray, min_dist: float=0.5, umap_neighbors: int=200,
         n_epochs (int): Optional, defaults to None. The number of training epochs to be
                         used in optimizing the low dimensional embedding.
         init (str): Initialization method for UMAP. Defaults to 'random'.
+        n_jobs (int): Number of parallel jobs to run. Defaults to -1 (use all processors).
 
     Returns:
         np.ndarray: UMAP-transformed data.
@@ -39,16 +40,16 @@ def apply_umap(dfn: np.ndarray, min_dist: float=0.5, umap_neighbors: int=200,
     
     # print('Embedding ...')
     model_umap = umap.UMAP(min_dist=min_dist, n_components=3, n_neighbors=umap_neighbors,
-                           learning_rate=learning_rate, n_epochs=n_epochs, init=init)
+                           learning_rate=learning_rate, n_epochs=n_epochs, init=init, n_jobs=n_jobs)
     df_umap = model_umap.fit_transform(dfn)
 
     return df_umap
 
 
-def get_sorted_clusters(df_umap, n_clusters=3, hclust_neighbors=40):
+def get_sorted_clusters(df_umap, n_clusters=3, hclust_neighbors=40, n_jobs=-1):
 
     # Clustering
-    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=-1, include_self=False)
+    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=n_jobs, include_self=False)
     model = AgglomerativeClustering(linkage='ward', connectivity=knn_graph, n_clusters=n_clusters)    
     clusters = model.fit_predict(df_umap)
 
@@ -70,10 +71,10 @@ def get_sorted_clusters(df_umap, n_clusters=3, hclust_neighbors=40):
     return new_labels
 
 
-def get_clusters(df_umap, n_clusters=9, hclust_neighbors=40):
+def get_clusters(df_umap, n_clusters=9, hclust_neighbors=40, n_jobs=-1):
 
     # Clustering
-    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, include_self=False)
+    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=n_jobs, include_self=False)
     model = AgglomerativeClustering(linkage='ward', connectivity=knn_graph, n_clusters=n_clusters)    
     clusters = model.fit_predict(df_umap)
     

@@ -5,7 +5,7 @@
 #SBATCH --constraint=bigmem 
 
 #SBATCH --nodes=1
-#SBATCH --mem=700G
+#SBATCH --mem=800G
 #SBATCH --time=24:00:00
 #SBATCH --cpus-per-task=2
 
