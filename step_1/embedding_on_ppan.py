@@ -146,4 +146,4 @@ if __name__ == "__main__":
                       output_file=args.output_file)
 
     elapsed = time.time() - start
-    print(f"\n✔ Total execution time: {elapsed:.2f} s\n")
+    print(f"\nTotal execution time: {elapsed:.2f} s\n")
