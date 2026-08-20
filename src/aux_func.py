@@ -1,4 +1,3 @@
-import io
 import os
 import sys
 import re
@@ -7,18 +6,11 @@ import pandas as pd
 import xarray as xr
 from datetime import datetime
 from collections import OrderedDict
-
-# Ensure UTF-8 encoding for stdout
-if hasattr(sys.stdout, "buffer"):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8") 
-
-# Add path to local modules and import them
-source = os.path.abspath('/home/Laique.Djeutchouang/DEVs/BV-Regimes/NEMI/seaLevelRegimes')
-if source not in sys.path:
-    sys.path.insert(1, source)
-from src import nemi_func as nf  # Importing the nemi_func module
+from scipy.optimize import linear_sum_assignment
 
 
+# Define base directory for static files
+BASE_DIR = '/work/lnd/CM4X'
 
 def _entropy(row, i=0):
 
@@ -141,7 +133,8 @@ def get_overlap(ens_labels, id=0, num_members=3, max_clusters=None):
 
     return sortedOverlap
 
-def get_ent_for_all_params(labels, param_id=0, baselab_id=0, num_members=50):
+
+def get_ent_for_all_params(labels, param_id=0, baselab_id=0, num_members=50, method='hungarian'):
 
     """
     param_id - index for umap param combination
@@ -152,7 +145,7 @@ def get_ent_for_all_params(labels, param_id=0, baselab_id=0, num_members=50):
     # print("base_label = "+str(baselab_id), now.strftime("%H:%M:%S"))
 
     labs = labels[param_id, :, :]
-    sortedOverlap = get_overlap(ens_labels=labs, id=baselab_id, num_members=num_members)
+    sortedOverlap = get_overlap_method(ens_labels=labs, id=baselab_id, num_members=num_members, method=method)
     sortedOverlap_ = np.nan_to_num(sortedOverlap) # nan to zero
     df = pd.DataFrame(np.argmax(sortedOverlap_, axis=1)).T
     df = df.astype('int64')
@@ -192,7 +185,7 @@ def get_numbers_from_filename(filename):
 
 
 
-def load_clusters(clust_dir:str, n_clusters:int) -> tuple[OrderedDict, int]:
+def load_clusters_(clust_dir:str, n_clusters:int) -> tuple[OrderedDict, int]:
     """
     Load cluster data from the specified directory.
 
@@ -237,7 +230,6 @@ def load_clusters(clust_dir:str, n_clusters:int) -> tuple[OrderedDict, int]:
     return sorted_nclusters_dict, ncluster_size
 
 
-
 def fill_labels_array(sorted_nclusters_dict:OrderedDict,
                       emb_params:list, num_members:int, n_pts:int) -> np.ndarray:
     """
@@ -277,20 +269,54 @@ UMAP_NNS_MDS = [(5, 0.1), (5, 0.3), (5, 0.5), (5, 0.7), (5, 0.9),
 bvb_terms = ['beta_V', 'BPT', 'Mass_flux', 'eta_dt', 'Curl_dudt', 'Curl_taus', 'Curl_taub', 'Curl_Adv', 'Curl_diff']
 
 
-def reconstruct_DataArray(bvb_ds, embedded_nclusters_array) -> xr.Dataset:
+def sort_geo_regimes(gda):
+    # ── Step 1: get regime labels and rank regimes/clusters by size ─────────────────────────
+    labels = gda.values            # (nlat, nlon) or (ntime, nlat, nlon), float32; NaN = land
+
+    # Handle both 2D (lat, lon) and 3D (time, lat, lon)
+    spatial_shape = labels.shape[-2:]
+
+    # Flatten over all dimensions for global ranking
+    labels_flat = labels.reshape(-1, *spatial_shape)
+
+    # Explicitly mask any noise (label < 0) alongside land NaNs
+    noise_mask                    = np.isfinite(labels_flat) & (labels_flat < 0)
+    labels_clean                  = labels_flat.copy()
+    labels_clean[noise_mask]      = np.nan   # noise → NaN so it never enters the colormap
+
+    # Valid ocean (non-noise, non-land) points only
+    valid_mask                    = np.isfinite(labels_clean) & (labels_clean >= 0)
+    unique, counts                = np.unique(labels_clean[valid_mask], return_counts=True)
+    order                         = np.argsort(counts)[::-1]
+    sorted_labels                 = unique[order]
+
+    # ── Step 2: remap sorted regimes to its geography ───────────────────
+    remapped = np.full(labels_clean.shape, np.nan, dtype=np.float32)
+
+    for rank, lbl in enumerate(sorted_labels, start=1):
+        remapped[labels_clean == lbl] = rank
+
+    # Restore original shape
+    remapped = remapped.reshape(labels.shape)
+
+    gda_ranked = xr.DataArray(remapped, coords=gda.coords, dims=gda.dims, attrs=gda.attrs)
+
+    return gda_ranked
+
+
+def reconstruct_DataArray(bvb_ds, embedded_data) -> xr.Dataset:
     """
     Reconstruct the dataset with embedded clusters while preserving original 
     NaN patterns. Create an xarray Dataset from the cluster array data. 
     
     Args:
         bvb_ds (xarray.Dataset): Original xarray Dataset with NaN patterns.
-        embedded_nclusters_array (numpy.ndarray): Array of embedded clusters.
+        embedded_data (numpy.ndarray): Array of embedded clusters.
         
     Returns:
         xarray.Dataset: Dataset containing the reconstructed cluster data.
     """
     # Make a copy of the original xarray Dataset before further preprocessing
-    bvb_ds = bvb_ds[bvb_terms].copy()
     baseline_var = bvb_terms[0]
     da = bvb_ds[baseline_var].copy() 
     
@@ -304,7 +330,7 @@ def reconstruct_DataArray(bvb_ds, embedded_nclusters_array) -> xr.Dataset:
     reconstructed = np.full(full_shape, np.nan)
     
     # Fill in predictions where we had complete cases
-    reconstructed[complete_mask.values] = embedded_nclusters_array
+    reconstructed[complete_mask.values] = embedded_data
     
     # Create DataArray with original structure
     nclusters_da = xr.DataArray(reconstructed,
@@ -312,11 +338,14 @@ def reconstruct_DataArray(bvb_ds, embedded_nclusters_array) -> xr.Dataset:
                                 coords=da.coords)
     
     # Return cluster dataset with the original dataset structure
-    nclusters_ds = xr.Dataset()
-    nclusters_ds["geo_cluster"] = nclusters_da
-    nclusters_ds["geo_cluster"].attrs['standard_name'] = "Geospatial ocean regimes"
+    nclusters_ranked_da = sort_geo_regimes(nclusters_da)
+    if len(da.dims) == 3:
+       nclusters_ranked_da = nclusters_da.copy()
     
-    return nclusters_ds
+    nclusters_ranked_ds = nclusters_ranked_da.to_dataset(name="geo_cluster")
+    nclusters_ranked_da.attrs['standard_name'] = "Geospatial ocean regimes"
+    
+    return nclusters_ranked_ds
 
 
 def log_info(message):
@@ -344,3 +373,283 @@ def make_dirs(data_dir):
     """Create a directory if it doesn't exist."""
     from pathlib import Path
     Path(data_dir).mkdir(parents=True, exist_ok=True)
+
+
+def get_overlap_method(ens_labels, id=0, num_members=3, max_clusters=None, method='hungarian'):
+
+    base_id = id
+    base_labels = ens_labels[base_id]
+    compare_ids = [i for i in range(num_members)]
+    compare_ids.pop(base_id)
+
+    num_clusters = int(np.max(base_labels) + 1)
+
+    # If not pre-set, set max number of clusters to total number of clusters in the base
+    if max_clusters is None:
+        max_clusters = num_clusters
+
+    sortedOverlap = np.zeros((len(compare_ids)+1, max_clusters, base_labels.shape[0])) * np.nan
+
+    # print(num_clusters, max_clusters)
+    summaryStats = np.zeros((num_clusters, max_clusters))
+
+    # Compile sorted cluster data
+    # TODO: add assert statement to make sure that the clusters have been sorted?
+
+    # dataVector = [nemi.clusters for id, nemi in enumerate(self.nemi_pack) if id != base_id]
+    dataVector = [ens_labels[id] for id, nemi in enumerate(ens_labels) if id != base_id]
+
+    # Loop over ensemble members, not including the base member
+    for compare_cnt, compare_id in enumerate(compare_ids):
+        # Grab clusters of ensemble member
+        compare_labels = dataVector[compare_cnt]
+
+        # go through each cluster in the base and assess the percentage overlap
+        # for every cluster in the ensemble member (overlap / total coverage area) 
+        for c1 in range(max_clusters): 
+            # Initialize dummy array to mark location of the cluster for the base member
+            data1_M = np.zeros(base_labels.shape, dtype=int)
+            
+            # Mark where the considered cluster is in the member that is being used as the baseline
+            data1_M[np.where(c1==base_labels)] = 1 
+            
+            # Count number of entries [Why?] 
+            summaryStats[0, c1] = np.sum(data1_M) 
+
+            # Go through each cluster
+            # k = 0
+            for c2 in range(num_clusters):
+                # Initialize dummy array to mark where the cluster is in the comparison member
+                data2_M = np.zeros(base_labels.shape, dtype=int) 
+
+                # Mark where the considered cluster is in the member that is being used as the comparison
+                data2_M[np.where(c2==compare_labels)] = 1    
+
+                # Sum of flags where the two datasets of that cluster are both present
+                num_overlap = np.sum(data1_M * data2_M)       
+
+                # Sum of where they overlap
+                num_total = np.sum(data1_M | data2_M)       
+
+                # Collect the number that is largest of k and the num_overlap/num_total
+                # k = max(k, num_overlap / num_total)       
+                summaryStats[c2, c1] = (num_overlap / num_total) * 100 # Add percentage of coverage
+
+            # Filled in 'summaryStatistics' matrix results of percentage overlaps
+
+        # Clusters are already sorted by size
+        usedClusters = set() # Used to mak sure clusters don't get selected twice
+        
+        if method == 'hungarian':
+            # Overlap assessment using Hungarian method
+            cost_matrix = (-1) * summaryStats[:num_clusters, :max_clusters]  # We want to maximize overlap, so we use negative values
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            for i in range(len(row_ind)):
+                sortedOverlapForOneCluster = np.zeros(base_labels.shape, dtype=int) * np.nan
+
+                # Initialize dummy array
+                data2_M = np.zeros(base_labels.shape, dtype=int)
+
+                # Select which cluster is being assessed
+                biggestCluster = row_ind[i]
+                usedClusters.add(biggestCluster)
+                data2_M[np.where(biggestCluster == compare_labels)] = 1 # Select cluster being assessed
+
+                sortedOverlapForOneCluster[np.where(data2_M == 1)] = 1
+                sortedOverlap[compare_id, col_ind[i], :] = sortedOverlapForOneCluster
+    
+        else:
+            # Go through clusters from (biggest to smallest since they are sorted)
+            for c1 in range(max_clusters):  
+                sortedOverlapForOneCluster = np.zeros(base_labels.shape, dtype=int) * np.nan
+
+                # Find biggest cluster in first column, making sure it has not been used
+                sortedClusters = np.argsort(summaryStats[:, c1])[::-1]
+                biggestCluster = [ele for ele in sortedClusters if ele not in usedClusters][0]
+
+                # Record it for later
+                usedClusters.add(biggestCluster)
+
+                # Initialize dummy array
+                data2_M = np.zeros(base_labels.shape, dtype=int)
+
+                # Select which country is being assessed
+                data2_M[np.where(biggestCluster == compare_labels)] = 1 # Select cluster being assessed
+
+                sortedOverlapForOneCluster[np.where(data2_M==1)] = 1
+                sortedOverlap[compare_id, c1, :] = sortedOverlapForOneCluster
+
+    # Fill in the base entry in the sorted overlap
+    for c1 in range(max_clusters):  
+        sortedOverlap[base_id, c1, :] = 1 * (base_labels == c1)
+
+    return sortedOverlap
+
+
+
+def load_clusters(clust_dir: str, n_clusters: int) -> tuple[OrderedDict, int]:
+    """
+    Load cluster data from the specified directory.
+
+    Returns:
+        OrderedDict[(ens, nn, md) -> np.ndarray]
+        int: size of cluster (first dimension)
+    """
+    nclusters_dir = os.path.join(clust_dir, f"nclusters_{n_clusters}")
+
+    if not os.path.isdir(nclusters_dir):
+        raise FileNotFoundError(f"Directory not found: {nclusters_dir}")
+
+    nclusters_dict = {}
+    cluster_shape = None
+
+    for root, _, files in os.walk(nclusters_dir):
+        for file in files:
+            path = os.path.join(root, file)
+
+            try:
+                cluster = np.load(path)
+            except Exception as e:
+                raise RuntimeError(f"Failed to load {path}") from e
+
+            nums = get_numbers_from_filename(file)
+
+            if not nums:
+                raise ValueError(f"Could not parse filename: {file}")
+
+            # --- robust parsing ---
+            if isinstance(nums[0], (list, tuple)) and len(nums[0]) > 1:
+                ens = int(nums[0][1]) if int(nums[0][0]) == 0 else int(nums[0])
+            else:
+                ens = int(nums[0])
+
+            md = float(f"{nums[1]}.{nums[2]}")
+            nn = int(nums[3])
+
+            nclusters_dict[(ens, nn, md)] = cluster
+
+            # store shape once
+            if cluster_shape is None:
+                cluster_shape = cluster.shape
+
+    # --- safety check ---
+    if not nclusters_dict:
+        raise ValueError(f"No cluster files found in: {nclusters_dir}")
+
+    ncluster_size = cluster_shape[0]
+
+    sorted_nclusters_dict = OrderedDict(
+        sorted(nclusters_dict.items(), key=lambda t: t[0])
+    )
+
+    return sorted_nclusters_dict, ncluster_size
+
+
+
+class ProjectionPipeline():
+
+    import xarray as xr
+    
+    def __init__(self, bvb_ds, bvb_terms, data_res="p25", bvb_dir='/work/lnd/CM4X/BVB'):
+        self.terms = bvb_terms # List of feature variable names
+        self.bvb_ds = bvb_ds.copy() # Original xarray Dataset
+        self.data_res = data_res
+        self.BASE_DIR = bvb_dir
+
+    def step_process_nemi_data(self, time_step, data_scaler=None):
+        try:
+            ds = self.bvb_ds[self.terms].isel(time=time_step)
+        except ValueError:
+            ds = self.bvb_ds[self.terms].isel(month=time_step)
+            
+        return self.prepare_data(ds, data_scaler)
+    
+    def prepare_data(self, bvb_ds, data_scaler=None, reconst_flag=False):
+        """
+        Method to prepare multidimensional dataset for UMAP dimension reduction input as well as
+        for NEMI clustering inputs.
+        
+        Args:
+            Transformer: Method for scaling/centering/normalization/binarization (and more) the data.
+                         Default to QuantileTransformer() that transforms features using quantiles information.
+            
+        Returns:
+            Dictionay of (valid_samples, reconstruct_info) where:
+            - valid_samples: dict with 'unscaled' and 'scaled' valid samples as numpy arrays
+            - reconstruct_info: dict needed to reconstruct the dataset
+        """
+        # Make a copy of the original dataset for further preprocessing
+        ds = bvb_ds.copy() 
+        
+        # Create mask of complete cases (no NaNs in any predictor)
+        complete_mask = xr.full_like(ds[self.terms[0]], True, dtype=bool)
+        for var in self.terms:
+            complete_mask = complete_mask & ds[var].notnull()
+        
+        # Extract valid samples
+        bvb_array = np.column_stack([ds[var].values[complete_mask.values] for var in self.terms])
+        
+        # Store reconstruction info
+        reconstruct_info = {'complete_mask': complete_mask,
+                            'predictor_vars': self.terms,
+                            'original_dims': ds.dims,
+                            'baseline_var': self.terms[0],
+                            'original_coords': ds.coords}
+        # Outputs
+        if reconst_flag:
+            return reconstruct_info
+        else:
+            if data_scaler: 
+                nemi_featured_data = pd.DataFrame(data=data_scaler.fit_transform(bvb_array), columns=self.terms)
+            else:
+                nemi_featured_data = pd.DataFrame(data=bvb_array, columns=self.terms) 
+            
+            output = {"nemi_data": nemi_featured_data,
+                      "reconst_info": reconstruct_info}
+            return output
+    
+    def back_project_nemi(self, embedded_data, varname="geo_cluster",
+                          standard_name="Geographical ocean regimes"):
+        """
+        Reconstruct the dataset with embedded clusters while preserving original NaN patterns
+        
+        Args:
+            embedded_data: numpy array of identified optimal clusters
+            reconstruct_info: from prepare_multidim_data 
+        """
+        # Make a copy of the original dataset for further preprocessing
+        original_ds = self.bvb_ds
+        reconst_info = self.prepare_data(original_ds, reconst_flag=True)
+         
+        # Create full array with NaNs
+        full_shape = original_ds[reconst_info['baseline_var']].shape
+        reconstructed = np.full(full_shape, np.nan)
+        
+        # Fill in predictions where we had complete cases
+        reconstructed[reconst_info['complete_mask'].values] = embedded_data
+        
+        # Create DataArray with original structure
+        clusters_da = xr.DataArray(data=reconstructed,
+                                   dims=original_ds[reconst_info['baseline_var']].dims,
+                                   coords=original_ds[reconst_info['baseline_var']].coords)
+        
+        # Return cluster dataset with the original dataset structure
+        clusters_ds = xr.Dataset()
+        clusters_ds[varname] = clusters_da
+        clusters_ds[varname].attrs['standard_name'] = standard_name
+
+        # Get correct geographical coordinates. It must be extracted from static BVB data
+        data_vars = set(self.bvb_ds.data_vars)
+        if {"geolat_c", "geolon_c"}.issubset(data_vars):
+            bvb_geo_coords = self.bvb_ds[['geolat_c', 'geolon_c']].copy()
+        else:
+            # Load static BVB data with geocoords and extract them
+            bvb_path_ = f'{self.BASE_DIR}/CM4X-{self.data_res}_BVB_and_tracers_geocoords_2005_2014_time_mean.zarr'
+            bvb_ = xr.open_zarr(bvb_path_, chunks=None) 
+            bvb_geo_coords = bvb_[['geolat_c', 'geolon_c']].copy()
+
+        # Assign correct geographical coordinates
+        clusters_ds = xr.merge([clusters_ds, bvb_geo_coords]) # Merge BVB dataset with geocoords dataset
+        clusters_ds = clusters_ds.set_coords(['geolat_c', 'geolon_c']) # Set geocoords as coordinates
+        
+        return clusters_ds
