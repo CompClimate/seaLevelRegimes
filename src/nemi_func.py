@@ -17,10 +17,11 @@ from sklearn.preprocessing import StandardScaler, RobustScaler, QuantileTransfor
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.neighbors import kneighbors_graph
 from sklearn.cluster import DBSCAN
+from scipy.optimize import linear_sum_assignment
 
 
-def apply_umap(dfn:np.ndarray, min_dist:float=0.5, umap_neighbors:int=200,
-               learning_rate:float=1.0, n_epochs: int=None, init:str='random', n_jobs:int=-1) -> np.ndarray:
+def apply_umap(dfn: np.ndarray, min_dist: float=0.5, umap_neighbors: int=200,
+               learning_rate: float=1.0, n_epochs: int=None, init: str='spectral') -> np.ndarray:
     """
     Apply UMAP dimensionality reduction.
 
@@ -31,8 +32,7 @@ def apply_umap(dfn:np.ndarray, min_dist:float=0.5, umap_neighbors:int=200,
         learning_rate (float): Number of neighbors for UMAP. Defaults to 1.0.
         n_epochs (int): Optional, defaults to None. The number of training epochs to be
                         used in optimizing the low dimensional embedding.
-        init (str): Initialization method for UMAP. Defaults to 'random'.
-        n_jobs (int): Number of parallel jobs to run. Defaults to -1 (use all processors).
+        init (str): Initialization method for UMAP. Defaults to 'spectral'.
 
     Returns:
         np.ndarray: UMAP-transformed data.
@@ -40,16 +40,16 @@ def apply_umap(dfn:np.ndarray, min_dist:float=0.5, umap_neighbors:int=200,
     
     # print('Embedding ...')
     model_umap = umap.UMAP(min_dist=min_dist, n_components=3, n_neighbors=umap_neighbors,
-                           learning_rate=learning_rate, n_epochs=n_epochs, init=init, n_jobs=n_jobs)
+                           learning_rate=learning_rate, n_epochs=n_epochs, init=init)
     df_umap = model_umap.fit_transform(dfn)
 
     return df_umap
 
 
-def get_sorted_clusters(df_umap, n_clusters=3, hclust_neighbors=40, n_jobs=-1):
+def get_sorted_clusters(df_umap, n_clusters=3, hclust_neighbors=40):
 
     # Clustering
-    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=n_jobs, include_self=False)
+    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=-1, include_self=False)
     model = AgglomerativeClustering(linkage='ward', connectivity=knn_graph, n_clusters=n_clusters)    
     clusters = model.fit_predict(df_umap)
 
@@ -71,10 +71,10 @@ def get_sorted_clusters(df_umap, n_clusters=3, hclust_neighbors=40, n_jobs=-1):
     return new_labels
 
 
-def get_clusters(df_umap, n_clusters=9, hclust_neighbors=40, n_jobs=-1):
+def get_clusters(df_umap, n_clusters=9, hclust_neighbors=40):
 
     # Clustering
-    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, n_jobs=n_jobs, include_self=False)
+    knn_graph = kneighbors_graph(df_umap, n_neighbors=hclust_neighbors, include_self=False)
     model = AgglomerativeClustering(linkage='ward', connectivity=knn_graph, n_clusters=n_clusters)    
     clusters = model.fit_predict(df_umap)
     
@@ -522,3 +522,119 @@ scalers = {'Quantile-Normal': [QuantileTransformer, 'qtnormalscaled'],
            'Signed-Log': [SignedLogTransformer, 'signedlogscaled'],
            'Power-10': [Power10Transformer, 'power10scaled'],}
 
+
+
+def assess_overlap_method(ens_labels, label_id=0, num_members=50, max_clusters=None, method='hungarian'):
+
+    base_id = copy.deepcopy(label_id)
+    base_labels = ens_labels[base_id]
+    compare_ids = [i for i in range(num_members)]
+    compare_ids.pop(base_id)
+    num_clusters = int(np.max(base_labels) + 1)
+
+    # If not pre-set, set max number of clusters to total number of clusters in the base
+    if max_clusters is None:
+        max_clusters = copy.deepcopy(num_clusters)
+
+    sortedOverlap = np.zeros((len(compare_ids)+1, max_clusters, base_labels.shape[0]))*np.nan
+
+    print(num_clusters, max_clusters)
+    summaryStats = np.zeros((num_clusters, max_clusters))
+
+    # Compile sorted cluster data
+    # TODO: add assert statement to make sure that the clusters have been sorted?
+
+    # dataVector = [nemi.clusters for id, nemi in enumerate(self.nemi_pack) if id != base_id]
+    dataVector = [ens_labels[id] for id, _ in enumerate(ens_labels) if id != base_id]
+
+    # Loop over ensemble members, not including the base member
+    for compare_cnt, compare_id in enumerate(compare_ids):
+        
+        # Grab clusters of ensemble member
+        compare_labels = dataVector[compare_cnt]
+
+        # Go through each cluster in the base and assess the percentage overlap
+        # for every cluster in the ensemble member (overlap / total coverage area) 
+        for c1 in range(max_clusters): 
+            # Initialize dummy array to mark location of the cluster for the base member
+            data1_M = np.zeros(base_labels.shape, dtype=int)
+            
+            # Mark where the considered cluster is in the member that is being used as the baseline
+            data1_M[np.where(c1==base_labels)] = 1 
+            
+            # Count numer of entries [Why?] 
+            summaryStats[0, c1] = np.sum(data1_M) 
+
+            # Go through each cluster
+            # k = 0
+            for c2 in range(num_clusters):
+                # Initialize dummy array to mark where the cluster is in the comparison member
+                data2_M = np.zeros(base_labels.shape, dtype=int) 
+
+                # Mark where the considered cluster is in the member that is being used as the comparison
+                data2_M[np.where(c2==compare_labels)] = 1    
+
+                # Sum of flags where the two datasets of that cluster are both present
+                num_overlap = np.sum(data1_M*data2_M)       
+
+                # Sum of where they overlap
+                num_total = np.sum(data1_M | data2_M)       
+
+                # Collect the number that is largest of k and the num_overlap/num_total
+                # k = max(k, num_overlap / num_total)       
+                summaryStats[c2, c1] = (num_overlap / num_total) * 100 # Add percentage of coverage
+
+            # Filled in 'summaryStatistics' matrix results of percentage overlaps
+
+        # Clusters are already sorted by size
+        usedClusters = set() # Used to mak sure clusters don't get selected twice
+        
+        if method == 'hungarian':
+            # Overlap assessment using Hungarian method
+            cost_matrix = (-1) * summaryStats[:num_clusters, :max_clusters]  # We want to maximize overlap, so we use negative values
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            for i in range(len(row_ind)):
+                sortedOverlapForOneCluster = np.zeros(base_labels.shape, dtype=int) * np.nan
+
+                # Initialize dummy array
+                data2_M = np.zeros(base_labels.shape, dtype=int)
+
+                # Select which cluster is being assessed
+                biggestCluster = row_ind[i]
+                usedClusters.add(biggestCluster)
+                data2_M[np.where(biggestCluster == compare_labels)] = 1 # Select cluster being assessed
+
+                sortedOverlapForOneCluster[np.where(data2_M == 1)] = 1
+                sortedOverlap[compare_id, col_ind[i], :] = sortedOverlapForOneCluster
+    
+        else:
+            # Go through clusters from (biggest to smallest since they are sorted)
+            for c1 in range(max_clusters):  
+                sortedOverlapForOneCluster = np.zeros(base_labels.shape, dtype=int) * np.nan
+
+                # Find biggest cluster in first column, making sure it has not been used
+                sortedClusters = np.argsort(summaryStats[:, c1])[::-1]
+                biggestCluster = [ele for ele in sortedClusters if ele not in usedClusters][0]
+
+                # Record it for later
+                usedClusters.add(biggestCluster)
+
+                # Initialize dummy array
+                data2_M = np.zeros(base_labels.shape, dtype=int)
+
+                # Select which country is being assessed
+                data2_M[np.where(biggestCluster == compare_labels)] = 1 # Select cluster being assessed
+
+                sortedOverlapForOneCluster[np.where(data2_M==1)] = 1
+                sortedOverlap[compare_id, c1, :] = sortedOverlapForOneCluster
+
+    # Fill in the base entry in the sorted overlap
+    for c1 in range(max_clusters):  
+        sortedOverlap[base_id, c1, :] = 1 * (base_labels == c1)
+
+    # Majority vote
+    aggOverlaps = np.nansum(sortedOverlap, axis=0)
+    voteOverlaps = np.argmax(aggOverlaps, axis=0)
+
+    # Save clusters estimated from the ensemble
+    return voteOverlaps
