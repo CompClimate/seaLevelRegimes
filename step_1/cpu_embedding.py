@@ -23,34 +23,23 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# cuML UMAP initialisation — fails fast if GPU / cuML is unavailable.
+# umap-learn UMAP initialisation (CPU, scikit-learn-compatible estimator).
 # ---------------------------------------------------------------------------
-def _init_cuml_umap():
-    """Import cuML UMAP and bind to GPU device 0. Exits on failure."""
+def _init_umap():
+    """Import umap-learn's UMAP. Exits on failure."""
     try:
-        import warnings
-        import cupy
-        if cupy.cuda.runtime.getDeviceCount() == 0:
-            log.error("No CUDA-capable GPU found. This script requires a GPU with cuML.")
-            sys.exit(1)
-        # Explicitly bind to device 0 so cuML doesn't bypass CUDA_VISIBLE_DEVICES.
-        cupy.cuda.Device(0).use()
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=FutureWarning)
-            import cuml
-            from cuml.manifold import UMAP as cuUMAP
-        cuml.set_global_output_type("numpy")  # always return np.ndarray
-        log.info("RAPIDS cuML detected – using GPU-accelerated UMAP.")
-        return cuUMAP
+        from umap import UMAP as skUMAP
+        log.info("umap-learn detected – using CPU UMAP.")
+        return skUMAP
     except ImportError as exc:
-        log.error("cuML import failed (dependency or installation issue): %s", exc)
+        log.error("umap-learn import failed (dependency or installation issue): %s", exc)
         sys.exit(1)
     except Exception as exc:
-        log.error("Failed to initialise cuML (%s: %s).", type(exc).__name__, exc)
+        log.error("Failed to initialise umap-learn (%s: %s).", type(exc).__name__, exc)
         sys.exit(1)
 
 
-UMAP = _init_cuml_umap()
+UMAP = _init_umap()
 
 
 # ---------------------------------------------------------------------------
@@ -59,14 +48,14 @@ UMAP = _init_cuml_umap()
 def process_embedding(data: np.ndarray, umap_kwargs: dict,
                       output_file: str) -> np.ndarray | None:
     """
-    Compute a UMAP embedding with cuML and save it to disk.
+    Compute a UMAP embedding with umap-learn (CPU) and save it to disk.
 
     Args:
         data (np.ndarray): Input data, shape (n_samples, n_features).
         umap_kwargs (dict): UMAP keyword arguments:
             - umap_md (float): min_dist, default 0.1
             - umap_nn (int): n_neighbors, default 200
-            - n_epochs (int): training epochs, default None (auto → 0 for cuML)
+            - n_epochs (int): training epochs, default None (auto)
             - learning_rate (float): default 1.0
             - init (str): initialisation method, default 'random'
             - umap_rs (int): random_state, default 42
@@ -93,13 +82,9 @@ def process_embedding(data: np.ndarray, umap_kwargs: dict,
                        min_dist     = umap_md,
                        learning_rate= learning_rate,
                        init         = init,
-                       # cuML uses 0 for auto; None is not accepted.
-                       n_epochs     = 0 if n_epochs is None else n_epochs,
+                       # umap-learn uses None for auto (unlike cuML's 0).
+                       n_epochs     = n_epochs,
                        random_state = umap_rs)
-    # nn_descent (cuML default) requires n_neighbors < internal graph_degree (~64).
-    # Switch to brute-force KNN when n_neighbors is large enough to hit that limit.
-    if umap_nn >= 64:
-        umap_params["build_algo"] = "brute_force_knn"
 
     embedding = UMAP(**umap_params).fit_transform(data.astype(np.float32))
     if not isinstance(embedding, np.ndarray):
@@ -114,7 +99,7 @@ def process_embedding(data: np.ndarray, umap_kwargs: dict,
 def run_embedding(input_file: str, umap_kwargs: dict,
                   output_file: str) -> np.ndarray | None:
     """
-    Load input data, run cuML UMAP embedding, and save the result.
+    Load input data, run umap-learn UMAP embedding (CPU), and save the result.
 
     Args:
         input_file (str): Path to the input Parquet data file.
@@ -139,7 +124,7 @@ def run_embedding(input_file: str, umap_kwargs: dict,
 # CLI entry point
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="cuML GPU UMAP embedding")
+    parser = argparse.ArgumentParser(description="umap-learn CPU UMAP embedding")
     parser.add_argument("input_file",  type=str)
     parser.add_argument("min_dist",    type=float)
     parser.add_argument("n_neighbors", type=int)
