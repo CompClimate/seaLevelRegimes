@@ -28,6 +28,8 @@ largest probability) are written alongside them for convenience.
 | `pipeline.py` | The pipeline: data preparation, training, probabilistic inference. `python pipeline.py --help` is the complete option reference. |
 | `pipeline.sh` | Slurm batch script. Sets up the environment and forwards **every** argument verbatim to `pipeline.py main()`. |
 | `submit.sh` | Submitter. Consumes the job options, turns them into `sbatch` flags, and passes everything else through to the pipeline. |
+| `environment.yml` | Conda/mamba specification for the runtime environment. |
+| `requirements.txt` | The same dependencies as a pip fallback, for use inside an existing environment. |
 
 The dependency chain is one-directional and each layer has one job:
 
@@ -42,6 +44,9 @@ second option list to keep in sync.
 
 
 ## Quick start
+
+Create the environment first if you have not already — see
+[Environment](#environment).
 
 ```bash
 cd nn
@@ -365,10 +370,88 @@ analysis.to_netcdf("/work/lnd/CM4X/outputs/nn/predictions/my_run_analysis.nc")
 
 ## Environment
 
+### Creating one
+
+`environment.yml` and `requirements.txt` in this directory pin everything the
+pipeline and the notebook analysis need. The conda route is the one to prefer:
+`pytorch`, `netcdf4` and `cartopy` all wrap compiled libraries that conda
+resolves as a set, and pip does not.
+
+```bash
+# From nn/ - creates an environment named slvp_nn
+mamba env create -f environment.yml      # or: conda env create -f environment.yml
+mamba activate slvp_nn
+```
+
+Environments used by Slurm jobs are conventionally kept on `/work` rather than
+in a home directory — they are large, and `/work` is where the other shared
+environments on this cluster live. Create it by path and point the submitter at
+it:
+
+```bash
+mamba env create -f environment.yml -p /work/lnd/ODRI/CONDA/conda_envs/slvp_nn
+./submit.sh --env /work/lnd/ODRI/CONDA/conda_envs/slvp_nn
+```
+
+`environment.yml` installs the **CPU** build of PyTorch. For the `--gpus`
+partition, swap `pytorch` for `pytorch-gpu` in the file before creating the
+environment.
+
+If you would rather add the dependencies to an environment you already have,
+`requirements.txt` is the same list for pip:
+
+```bash
+mamba create -n slvp_nn python=3.12 -y
+mamba activate slvp_nn
+python -m pip install -r requirements.txt
+```
+
+On Linux the plain `torch` wheel is the CUDA build, ~2.5 GB with its NVIDIA
+runtime dependencies. For a CPU-only environment, install it from the CPU index
+first:
+
+```bash
+python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+python -m pip install -r requirements.txt
+```
+
+Register the environment as a notebook kernel for the analysis workflow above:
+
+```bash
+python -m ipykernel install --user --name slvp_nn --display-name "Python (slvp_nn)"
+```
+
+### What is in it, and why
+
+| Package | Needed for |
+| --- | --- |
+| `pytorch` | The MLP, the training loop and inference |
+| `numpy` | Array maths throughout |
+| `scikit-learn` | `StandardScaler`, fitted on the training months |
+| `xarray` | The labelled arrays and the whole I/O layer |
+| `zarr` | `open_zarr` / `to_zarr` — the default `--pred-format` |
+| `dask` | `.chunk()`, applied before every `to_zarr` append |
+| `netcdf4` | `open_dataset` / `to_netcdf` — `--pred-format nc` |
+| `cftime` | Non-standard model calendars on the `time` axis |
+| `pandas` | The training-history dataframes |
+| `matplotlib`, `cartopy` | The maps and diagnostic figures |
+| `jupyterlab`, `ipykernel` | The notebook workflow |
+| `bottleneck` | Faster NaN-aware reductions over the land mask |
+
+`zarr`, `dask` and `netcdf4` are reached through `xarray` rather than imported
+directly, so they are easy to leave out — and the run then fails at the point
+where it writes its results rather than at import. They are not optional.
+
+### Pointing the job at an environment
+
 `pipeline.sh` activates `$SLVP_CONDA_ENV` (default
-`/work/lnd/ODRI/CONDA/conda_envs/nemi_env`), which must provide **pytorch**
-alongside `xarray`, `zarr`, `scikit-learn` and `numpy`. Point it elsewhere with
-`./submit.sh --env /path/to/env`.
+`/work/lnd/ODRI/CONDA/conda_envs/nemi_env`). Any environment named there must
+provide the core packages above; `--env` overrides it per submission.
+
+> **`nemi_env` has no pytorch.** The shared NEMI environment carries the
+> `xarray`/`zarr`/`scikit-learn` stack for steps 1–4 but not PyTorch, so the
+> default `--env` will fail at `import torch`. Create `slvp_nn` as above and
+> pass it with `--env`, or install `pytorch` into `nemi_env`.
 
 Three environment variables are honoured, all exported automatically by
 `submit.sh`:
