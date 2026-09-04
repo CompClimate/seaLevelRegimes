@@ -1,0 +1,54 @@
+# =============================================================================
+# Python requirements for the BV(B) sea-level regime NN pipeline.
+#
+#   pipeline.py   -> training + probabilistic inference
+#   nn/README.md  -> the notebook workflow that analyses and plots the outputs
+#
+# Preferred install (conda/mamba, resolves the compiled stack correctly):
+#     mamba env create -f environment.yml
+#
+# This file is the pip fallback, for use *inside* an already-created conda
+# environment:
+#     mamba create -n slvp_nn python=3.12 -y
+#     mamba activate slvp_nn
+#     python -m pip install -r requirements.txt
+#
+# Note on PyTorch: the plain `torch` wheel below is the CUDA build on Linux and
+# is large (~2.5 GB with its NVIDIA runtime deps). For a CPU-only environment:
+#     python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+# before running the command above.
+#
+# Version floors are the oldest releases known to work with this code; they are
+# well below what `nemi_env` on PPAN currently carries, so newer is fine.
+# =============================================================================
+
+# --- Core: required by pipeline.py -------------------------------------------
+torch>=2.2                # the MLP, training loop and inference
+numpy>=1.26,<3            # array maths throughout
+scikit-learn>=1.3         # StandardScaler (fitted on the training months)
+xarray>=2024.7            # labelled n-d arrays; the whole I/O layer
+
+# --- I/O backends: required by pipeline.py -----------------------------------
+# xarray delegates to these, so they are NOT optional for this pipeline.
+zarr>=2.18                # open_zarr / to_zarr  (the default --pred-format)
+dask>=2024.1              # .chunk() before every to_zarr append
+netCDF4>=1.6              # open_dataset / to_netcdf  (--pred-format nc)
+cftime>=1.6               # non-standard model calendars on the time axis
+
+# --- Analysis of the outputs: the nn/README.md notebook workflow -------------
+pandas>=2.0               # training-history dataframes
+matplotlib>=3.8           # every figure
+cartopy>=0.22             # map projections and coastlines for the regime maps
+jupyterlab>=4.0           # the notebook itself
+ipykernel>=6.25           # registers this env as a notebook kernel
+bottleneck>=1.3           # faster NaN-aware xarray reductions over the land mask
+
+# --- Optional: the NEMI steps 1-4 in the parent repository -------------------
+# Uncomment to serve step_1/ .. step_4/ and src/ from this same environment.
+# scipy>=1.11             # linear_sum_assignment (Hungarian matching, step_34)
+# umap-learn>=0.5         # CPU embeddings (step_1/cpu_embedding.py)
+# joblib>=1.3             # parallel helpers
+# tqdm>=4.65              # progress bars in src/nemi_func.py
+#
+# GPU embeddings (step_1/gpu_embedding.py) need cuml/cupy from the `rapidsai`
+# channel and cannot be pip-installed; use a RAPIDS environment for those.

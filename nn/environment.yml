@@ -1,0 +1,54 @@
+# =============================================================================
+# Conda/mamba environment for the BV(B) sea-level regime NN pipeline.
+#
+#   mamba env create -f environment.yml      # or: conda env create -f ...
+#   mamba activate slvp_nn
+#
+# To place it on a shared filesystem so Slurm compute nodes can reach it:
+#   mamba env create -f environment.yml -p /work/lnd/ODRI/CONDA/conda_envs/slvp_nn
+#   ./submit.sh --env /work/lnd/ODRI/CONDA/conda_envs/slvp_nn
+#
+# This installs the CPU build of PyTorch. For the GPU partition, swap
+# `pytorch` for `pytorch-gpu` (see the commented line below) on a machine whose
+# driver supports the CUDA build.
+# =============================================================================
+
+name: slvp_nn
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12
+
+  # --- Core: required by pipeline.py -----------------------------------------
+  - pytorch>=2.2            # the MLP, training loop and inference
+  # - pytorch-gpu>=2.2      # use INSTEAD of `pytorch` for the --gpus > 0 runs
+  - numpy>=1.26
+  - scikit-learn>=1.3       # StandardScaler (fitted on the training months)
+  - xarray>=2024.7
+
+  # --- I/O backends: required by pipeline.py ---------------------------------
+  # xarray delegates to these, so they are NOT optional for this pipeline.
+  - zarr>=2.18              # open_zarr / to_zarr  (the default --pred-format)
+  - dask>=2024.1            # .chunk() before every to_zarr append
+  - netcdf4>=1.6            # open_dataset / to_netcdf  (--pred-format nc)
+  - cftime>=1.6             # non-standard model calendars on the time axis
+
+  # --- Analysis of the outputs: the notebook workflow in README.md -----------
+  - pandas>=2.0             # training-history dataframes
+  - matplotlib-base>=3.8    # every figure
+  - cartopy>=0.22           # map projections and coastlines for the regime maps
+  - jupyterlab>=4.0         # the notebook itself
+  - ipykernel>=6.25         # registers this env as a notebook kernel
+  - bottleneck>=1.3         # faster NaN-aware reductions over the land mask
+
+  # --- Optional: the NEMI steps 1-4 in the parent repository -----------------
+  # Uncomment to serve step_1/ .. step_4/ and src/ from this same environment.
+  # - scipy>=1.11           # linear_sum_assignment (Hungarian matching, step_34)
+  # - umap-learn>=0.5       # CPU embeddings (step_1/cpu_embedding.py)
+  # - joblib>=1.3           # parallel helpers
+  # - tqdm>=4.65            # progress bars in src/nemi_func.py
+  #
+  # GPU embeddings (step_1/gpu_embedding.py) need cuml/cupy from the `rapidsai`
+  # channel; add that channel above, or use a separate RAPIDS environment.
