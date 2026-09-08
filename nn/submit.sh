@@ -23,28 +23,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Defaults - edit here, or override on the command line
 # -----------------------------------------------------------------------------
 # Data / experiment
-BASE_DIR="${SLVP_BASE_DIR:-/work/lnd/CM4X}"
-INPUT="${BASE_DIR}/inputs/monthly_bvb_nn_features_num_labels.zarr"
+BASE_DIR="${SLVP_BASE_DIR:-/group/maikesgrp/laique/PPAN/CM4X/NN4X}"
+INPUT="${BASE_DIR}/inputs/global_NN4X_p25_monthly_features_nc15.zarr"
 OUTDIR="${BASE_DIR}/outputs/nn"
 
 # Slurm resources
-ACCOUNT="gfdl_o"
-PARTITION=""                 # resolved below: 'analysis' (CPU) or 'gpu'
-TIME_LIMIT="12:00:00"
-MEMORY="250G"
-CPUS="8"
-GPUS="0"                     # >0 switches to the GPU partition
-GPU_TYPE="l40s"
+ACCOUNT="maikesgrp"
+PARTITION="gpu-h100-h"                 # resolved below: 'analysis' (CPU) or 'gpu'
+TIME_LIMIT="24:00:00"
+MEMORY="350G"
+CPUS="32"
+GPUS="1"                     # >0 switches to the GPU partition
+GPU_TYPE="h100"
 JOB_NAME=""                  # derived from --mode and --tag when empty
 LOGDIR="${SCRIPT_DIR}/dumps/nn"
 CONSTRAINT=""                # Slurm feature constraint, e.g. 'bigmem'
 # The 'analysis' partition is heterogeneous: an001/an002 are pre-AVX (2010)
 # Xeons on which prebuilt PyTorch wheels die with SIGILL. Exclude them by
 # default; pass '--exclude ""' to allow them.
-EXCLUDE_NODES="an001,an002"
+EXCLUDE_NODES=""
 
 # Runtime environment (must provide pytorch, xarray, zarr, scikit-learn)
-CONDA_ENV="${SLVP_CONDA_ENV:-/work/lnd/ODRI/CONDA/conda_envs/nemi_env}"
+CONDA_ENV="${SLVP_CONDA_ENV:-/quobyte/maikesgrp/laique/CONDA/conda_envs/nemi_env}"
 
 DRY_RUN=0
 
@@ -62,8 +62,11 @@ declare -A OPT=(
     [--n-regimes]="15"
     [--hidden]="256,128,64,32,16"
     [--dropout]=""
-    [--epochs]="100"
-    [--batch-size]="8192"
+    [--epochs]="150"
+    [--batch-size]="16384"
+    [--rare-regimes]=""
+    [--overwrite]=""
+    [--verbose]=""
     [--lr]=""
     [--weight-decay]=""
     [--train-frac]=""
@@ -75,8 +78,8 @@ declare -A OPT=(
     [--sched-threshold]=""
     [--sched-cooldown]=""
     [--min-lr]=""
-    [--class-weights]=""
-    [--curriculum-warmup]=""
+    [--class-weights]="curriculum"
+    [--curriculum-warmup]="25"
     [--entropy-unit]=""
     [--predict-batch-size]=""
     [--predict-time-chunk]=""

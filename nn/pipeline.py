@@ -65,10 +65,15 @@ BASE_DIR = os.environ.get("SLVP_BASE_DIR", "/work/lnd/CM4X")
 
 # Barotropic vorticity budget terms used as NN features.
 # Source of truth: src/aux_func.py::bvb_terms
-BVB_TERMS = ["beta_V", "BPT", "Mass_flux", "eta_dt",
-             "Curl_dudt", "Curl_taus", "Curl_taub", "Curl_Adv", "Curl_diff"]
+BVB_TERMS = ["beta_V", "BPT", "Mass_flux", "eta_dt", "Curl_dudt", "Curl_taus", 
+             "Curl_taub", "Curl_Adv", "Curl_diff", "zos", "tos", "col_height"]
 
 LABEL_VAR = "bvb_regime"
+# Regime/cluster IDs in the input store are 1-based (1..n_regimes), but
+# CrossEntropyLoss requires 0-based class indices (0..n_regimes-1). Labels are
+# shifted down by this offset on the way in and predictions shifted back up on
+# the way out, so `regime_pred` keeps the same numbering as `bvb_regime`.
+LABEL_BASE = 1
 GRID_DIMS = ("time", "lat", "lon")
 EPS = 1e-12
 
@@ -204,6 +209,19 @@ def make_dirs(path: str | Path) -> Path:
 # Data preparation
 # --------------------------------------------------------------------------- #
 
+def _fmt_day(value) -> str:
+    """
+    Format a single time coordinate value as YYYY-MM-DD.
+
+    Handles both numpy datetime64 (standard calendars) and cftime objects,
+    which CM4X output uses for non-standard calendars such as noleap. cftime
+    values are plain Python objects, so np.datetime_as_string rejects them.
+    """
+    if isinstance(value, np.datetime64):
+        return str(np.datetime_as_string(value, unit="D"))
+    return str(value)[:10]
+
+
 def open_dataset(path: str | Path,
                  features: list[str],
                  label_var: str | None = None,
@@ -253,8 +271,8 @@ def open_dataset(path: str | Path,
 
     LOGGER.info("Loaded %s | time: %s -> %s (%d steps) | grid: %d x %d",
                 path.name,
-                np.datetime_as_string(ds["time"].values[0], unit="D"),
-                np.datetime_as_string(ds["time"].values[-1], unit="D"),
+                _fmt_day(ds["time"].values[0]),
+                _fmt_day(ds["time"].values[-1]),
                 ds.sizes["time"], ds.sizes["lat"], ds.sizes["lon"])
     return ds
 
@@ -309,7 +327,7 @@ def prepare_ml_data(ds: xr.Dataset,
     if label_var is not None:
         y_flat = ds[label_var].transpose(*GRID_DIMS).values.reshape(-1)
         valid &= np.isfinite(y_flat)
-        y = y_flat[valid].astype(np.int64)
+        y = y_flat[valid].astype(np.int64) - LABEL_BASE
 
     Xv = X[valid]
     del X
@@ -850,7 +868,7 @@ def predict_probabilistic_maps(model, ds_new, scaler, device, features,
 
     prob_map[samples.valid] = probs
     ent_map[samples.valid] = entropy
-    pred_map[samples.valid] = probs.argmax(axis=1).astype(np.float32)
+    pred_map[samples.valid] = (probs.argmax(axis=1) + LABEL_BASE).astype(np.float32)
     conf_map[samples.valid] = probs.max(axis=1)
 
     nt, nlat, nlon = samples.shape
@@ -858,7 +876,7 @@ def predict_probabilistic_maps(model, ds_new, scaler, device, features,
 
     prob_da = xr.DataArray(prob_map.reshape(nt, nlat, nlon, K),
                            dims=GRID_DIMS + ("regime",),
-                           coords={**coords, "regime": np.arange(K)},
+                           coords={**coords, "regime": np.arange(K) + LABEL_BASE},
                            name="regime_prob",
                            attrs={"description": PROB_DESCRIPTION, "units": "1"})
     ent_da = xr.DataArray(ent_map.reshape(nt, nlat, nlon),
@@ -989,10 +1007,17 @@ class BVBRegimeMLP:
                               scaler=self.scaler, fit_scaler=False)
 
         for name, s in (("training", train), ("validation", val)):
-            hi = int(s.y.max())
+            hi, lo = int(s.y.max()), int(s.y.min())
+            if lo < 0:
+                raise ValueError(f"The {name} labels fall to {lo + LABEL_BASE} in "
+                                 f"{self.config.label_var}, below the expected "
+                                 f"lowest regime ID {LABEL_BASE}.")
             if hi >= self.config.n_regimes:
-                raise ValueError(f"The {name} labels reach {hi}, but n_regimes="
-                                 f"{self.config.n_regimes}. Pass --n-regimes {hi + 1}.")
+                raise ValueError(f"The {name} labels reach {hi + LABEL_BASE} in "
+                                 f"{self.config.label_var}, but n_regimes="
+                                 f"{self.config.n_regimes} only allows IDs up to "
+                                 f"{self.config.n_regimes - 1 + LABEL_BASE}. "
+                                 f"Pass --n-regimes {hi + 1}.")
 
         # `min_batch=2`: BatchNorm cannot normalise a trailing batch of one sample.
         train_batches = TensorBatcher(train.X, train.y, cfg.batch_size, shuffle=True,
@@ -1177,18 +1202,18 @@ def build_parser() -> argparse.ArgumentParser:
     model.add_argument("--dropout", type=float, default=0.0, help="Dropout in the hidden blocks.")
 
     opt = p.add_argument_group("optimisation")
-    opt.add_argument("-e", "--epochs", type=int, default=100, help="Maximum number of epochs.")
-    opt.add_argument("-b", "--batch-size", type=int, default=8192, help="Samples per batch.")
+    opt.add_argument("-e", "--epochs", type=int, default=150, help="Maximum number of epochs.")
+    opt.add_argument("-b", "--batch-size", type=int, default=16384, help="Samples per batch.")
     opt.add_argument("--lr", type=float, default=1e-3, help="Initial learning rate.")
     opt.add_argument("--weight-decay", type=float, default=1e-5, help="Adam weight decay.")
     opt.add_argument("--train-frac", type=float, default=0.7,
                      help="Fraction of months used for training (the rest validates).")
-    opt.add_argument("--patience", type=int, default=16, help="Early-stopping patience (epochs).")
+    opt.add_argument("--patience", type=int, default=25, help="Early-stopping patience (epochs).")
     opt.add_argument("--min-delta", type=float, default=1e-4,
                      help="Minimum improvement that resets the early-stopping counter.")
     opt.add_argument("--lambda-entropy", type=float, default=0.25,
                      help="Weight of the entropy term in the scheduler/stopping metric.")
-    opt.add_argument("--sched-factor", type=float, default=0.5, help="LR reduction factor.")
+    opt.add_argument("--sched-factor", type=float, default=0.25, help="LR reduction factor.")
     opt.add_argument("--sched-patience", type=int, default=8, help="LR scheduler patience.")
     opt.add_argument("--sched-threshold", type=float, default=1e-3,
                      help="Minimum improvement counted by the LR scheduler.")

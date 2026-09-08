@@ -17,6 +17,8 @@ name: slvp_nn
 
 channels:
   - conda-forge
+  - nvidia
+  - defaults
 
 dependencies:
   - python=3.12
@@ -24,6 +26,7 @@ dependencies:
   # --- Core: required by pipeline.py -----------------------------------------
   - pytorch>=2.2            # the MLP, training loop and inference
   # - pytorch-gpu>=2.2      # use INSTEAD of `pytorch` for the --gpus > 0 runs
+  - nvidia::cuda-toolkit=13.3.0 # the GPU build of PyTorch needs this exact version of the CUDA toolkit
   - numpy>=1.26
   - scikit-learn>=1.3       # StandardScaler (fitted on the training months)
   - xarray>=2024.7
