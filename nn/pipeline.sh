@@ -17,8 +17,8 @@
 # =============================================================================
 
 #SBATCH --job-name=BVB:NN
-#SBATCH --account=gfdl_o
-#SBATCH --partition=analysis
+#SBATCH --account=maikesgrp
+#SBATCH --partition=gpu-h100-h
 
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -31,12 +31,16 @@
 
 set -euo pipefail
 
+# Make any future silent death self-reporting: print the command, line and exit
+# status that tripped errexit instead of ending the log mid-stream.
+trap 'rc=$?; echo "ERROR: pipeline.sh aborted at line ${LINENO}: \`${BASH_COMMAND}\` exited ${rc}" >&2' ERR
+
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
-NN_DIR="${SLVP_NN_DIR:-/home/Laique.Djeutchouang/DEVs/SLVP/seaLevelRegimes/nn}"
+NN_DIR="${SLVP_NN_DIR:-/home/djeutsch/Projects/seaLevelRegimes/nn}"
 PYTHON_FILE="${NN_DIR}/pipeline.py"
-CONDA_ENV_PATH="${SLVP_CONDA_ENV:-/work/lnd/ODRI/CONDA/conda_envs/nemi_env}"
+CONDA_ENV_PATH="${SLVP_CONDA_ENV:-/quobyte/maikesgrp/laique/CONDA/conda_envs/nemi_env}"
 
 if [[ ! -f "${PYTHON_FILE}" ]]; then
     echo "ERROR: pipeline.py not found at ${PYTHON_FILE}." >&2
@@ -55,9 +59,28 @@ fi
 # -----------------------------------------------------------------------------
 echo
 echo "Loading modules and activating the conda environment ..."
+
+# The module/conda shell hooks are NOT errexit-safe. The conda module's unload
+# hook runs `conda deactivate`, and when an env is already active in the
+# inherited environment (sbatch --export=ALL carries CONDA_SHLVL over) while
+# `conda` is only a binary and not yet a shell function, that call exits 1 with
+# "Run 'conda init' before 'conda deactivate'" - a message the hook itself
+# discards via 2>/dev/null. Under `set -e` that killed the job silently here.
+# So relax errexit across the module block and check the result explicitly.
+set +eu
 module purge
 module load conda
+eval "$(conda shell.bash hook 2>/dev/null)"   # make `conda activate` a function
 conda activate "${CONDA_ENV_PATH}"
+conda_rc=$?
+set -eu
+
+if [[ ${conda_rc} -ne 0 || "${CONDA_PREFIX:-}" != "${CONDA_ENV_PATH}" ]]; then
+    echo "ERROR: could not activate conda env ${CONDA_ENV_PATH}" >&2
+    echo "       conda activate exit=${conda_rc}, CONDA_PREFIX=${CONDA_PREFIX:-<unset>}" >&2
+    exit 1
+fi
+
 echo "Environment ready: $(python -c 'import sys; print(sys.executable)')"
 echo
 
