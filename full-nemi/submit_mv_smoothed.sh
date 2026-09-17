@@ -32,7 +32,7 @@ OUTPUT_FILE="${DATA_DIR}/majority_vote_md${MD}_nn${NN}_eps${EPSILON}_ms${MIN_SAM
 echo
 echo "==============================================================================================================="
 echo "Submitting a NEMI-DBSCAN Job with ${MEMBER_SIZE}-Member Ensemble to SLURM from the Following Configuration..."
-sbatch --job-name=NEMI:${DATA_RES}:MD${MD}:NN${NN} mv_smoothed.sh \
+sbatch --job-name=NEMI:${DATA_RES}:MD${MD}:NN${NN} majority_vote_smoothed.sh \
     "${MEMBER_SIZE}" "${MD}" "${NN}" \
     "${EPSILON}" "${MIN_SAMPLES}" \
     "${DATA_DIR}" "${OUTPUT_FILE}" \
