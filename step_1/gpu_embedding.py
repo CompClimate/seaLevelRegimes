@@ -76,7 +76,7 @@ def process_embedding(data: np.ndarray, umap_kwargs: dict,
     """
     umap_md       = umap_kwargs.get("umap_md", 0.1)
     umap_nn       = umap_kwargs.get("umap_nn", 200)
-    umap_rs     = umap_kwargs.get("umap_rs", 42)
+    umap_rs       = umap_kwargs.get("umap_rs", 42)
     n_epochs      = umap_kwargs.get("n_epochs", None)
     init          = umap_kwargs.get("init", "random")
     learning_rate = umap_kwargs.get("learning_rate", 1.0)
@@ -88,14 +88,14 @@ def process_embedding(data: np.ndarray, umap_kwargs: dict,
 
     log.info(f'Computing embedding: MD{umap_md}, NN: {umap_nn}')
 
-    umap_params = dict(n_neighbors  = umap_nn,
-                       n_components = 3,
-                       min_dist     = umap_md,
-                       learning_rate= learning_rate,
-                       init         = init,
-                       # cuML uses 0 for auto; None is not accepted.
-                       n_epochs     = 0 if n_epochs is None else n_epochs,
-                       random_state = umap_rs)
+    umap_params = { "n_neighbors": umap_nn,
+                    "n_components": 3,
+                    "min_dist": umap_md,
+                    "learning_rate": learning_rate,
+                    "init": init,
+                    # cuML uses 0 for auto; None is not accepted.
+                    "n_epochs": 0 if n_epochs is None else n_epochs,
+                    "random_state": umap_rs}
     # nn_descent (cuML default) requires n_neighbors < internal graph_degree (~64).
     # Switch to brute-force KNN when n_neighbors is large enough to hit that limit.
     if umap_nn >= 64:
