@@ -1,6 +1,8 @@
-# Predictability of Sea Level Regimes
+# Cropping a Global Embedding to a Region of Interest
 
-Determining and predicting regimes of sea level variability as outlined with the vorticity budgets.
+## Overview
+
+Part of the sea level regimes pipeline, which determines and predicts regimes of sea level variability from the barotropic vorticity budget (BVB). This folder sits between step 1 and step 2: it takes the global UMAP embedding from step 1, puts it back on a regular lat-lon grid, and crops it to a region (the North Atlantic by default). The cropped samples can then be clustered with step 2 instead of the global field.
 
 ---
 
